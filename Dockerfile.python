@@ -1,0 +1,20 @@
+# Shared Dockerfile for all Python services.
+# Build with: docker build -f Dockerfile.python --build-arg SERVICE=api .
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+
+ARG SERVICE
+# System packages some services need (e.g. ingestion: docling's TableFormer
+# imports OpenCV, which needs libgl1/libglib2.0-0 on slim images).
+ARG APT_PACKAGES=""
+RUN if [ -n "$APT_PACKAGES" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends $APT_PACKAGES \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_HTTP_TIMEOUT=300
+
+WORKDIR /app
+COPY . .
+RUN uv sync --frozen --no-dev --package insurance-${SERVICE}
+
+ENV PATH="/app/.venv/bin:$PATH"

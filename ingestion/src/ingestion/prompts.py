@@ -1,0 +1,177 @@
+"""Ingestion LLM prompts and structured-output contracts."""
+
+from __future__ import annotations
+
+import re
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from typing import get_args
+
+from pydantic import field_validator, model_validator
+
+from shared import (
+    HealthCoverage,
+    LifeCoverage,
+    PetCoverage,
+    PolicyVersion,
+    ProductLine,
+    TravelCoverage,
+)
+
+EXTRACT_POLICY_SYSTEM = """You extract insurance policy facts from a public \
+brochure or product document into a structured draft for HUMAN REVIEW.
+Rules:
+- Record ONLY what the document states. NEVER guess, infer, or fill gaps;
+  leave fields null when the document doesn't say.
+- insurer_name: the insurance company's official name exactly as printed in
+  the document (letterhead, footer, or regulatory line).
+- Amounts are PHP unless the document explicitly states another currency.
+- Tables usually hold premiums, limits, and age bands — read them carefully.
+- summary: 2-4 factual sentences a comparison shopper would need.
+- exclusions/riders: short verbatim-faithful phrases from the document.
+- The draft will be reviewed and corrected by a human before publication;
+  when unsure, prefer null over a plausible-looking value."""
+
+
+def _amount_field_names() -> frozenset[str]:
+    """Every ``Decimal`` field across the policy + coverage models, derived from
+    the schema so newly added money fields are covered automatically."""
+    models = (PolicyVersion, LifeCoverage, HealthCoverage, TravelCoverage, PetCoverage)
+    return frozenset(
+        name
+        for model in models
+        for name, field in model.model_fields.items()
+        if field.annotation is Decimal or Decimal in get_args(field.annotation)
+    )
+
+
+AMOUNT_FIELDS = _amount_field_names()
+_AMOUNT_MULTIPLIERS = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+_AMOUNT_PATTERN = re.compile(r"([\d.]+)([kmb])?", re.IGNORECASE)
+_CURRENCY_NOISE = re.compile(r"(?i)php|usd|eur|gbp|[₱$€£,_\s]")
+
+
+def normalize_amount(value: object) -> object:
+    """Accept money as printed in brochures/schedules — ``PHP 3,000,000``,
+    ``₱2.5M``, ``P3,000,000.00`` — by stripping currency noise and thousands
+    separators and expanding an explicit ``K``/``M``/``B`` suffix. Non-strings
+    pass through untouched; anything unrecognised is returned as-is so Pydantic
+    still raises its normal, clear error instead of silently guessing."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    cleaned = _CURRENCY_NOISE.sub("", text)
+    cleaned = re.sub(r"(?i)^p(?=[\d.])", "", cleaned)  # leading peso "P3,000,000"
+    match = _AMOUNT_PATTERN.fullmatch(cleaned)
+    if not match:
+        return value
+    digits, suffix = match.group(1), match.group(2)
+    try:
+        number = Decimal(digits)
+    except InvalidOperation:
+        return value
+    if suffix:
+        number *= _AMOUNT_MULTIPLIERS[suffix.lower()]
+    if number == number.to_integral_value():
+        number = number.to_integral_value()
+    return format(number, "f")
+
+
+class PolicyDraft(PolicyVersion):
+    """PolicyVersion fields plus identity — what a reviewer approves.
+
+    insurer_name comes FROM the document (extracted, then human-confirmed);
+    publishing creates the insurer if it isn't in the catalog yet.
+    """
+
+    name: str
+    product_line: ProductLine
+    insurer_name: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_document_formats(cls, data: object) -> object:
+        """PDFs vary wildly in how they print money; normalize amount fields
+        (top-level premiums and nested coverage limits) before validation so a
+        reviewer pasting ``PHP 3,000,000`` doesn't trip a hard 422."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for name in AMOUNT_FIELDS & data.keys():
+            data[name] = normalize_amount(data[name])
+        coverage = data.get("coverage")
+        if isinstance(coverage, dict):
+            coverage = dict(coverage)
+            for name in AMOUNT_FIELDS & coverage.keys():
+                coverage[name] = normalize_amount(coverage[name])
+            data["coverage"] = coverage
+        return data
+
+    @field_validator("effective_date", mode="before")
+    @classmethod
+    def _parse_document_date(cls, value: object) -> object:
+        """Reviewers copy dates as printed in the brochure (e.g. ``06-Apr-2025``);
+        accept the day-month-name forms these documents use alongside ISO."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return date.fromisoformat(text)
+        except ValueError:
+            pass
+        for fmt in ("%d-%b-%Y", "%d %b %Y", "%d-%B-%Y", "%d %B %Y"):
+            try:
+                return datetime.strptime(text, fmt).date()
+            except ValueError:
+                continue
+        return value  # unrecognised -> let Pydantic raise its clear date error
+
+    @model_validator(mode="after")
+    def coverage_matches_product_line(self) -> PolicyDraft:
+        if self.coverage.line != self.product_line:
+            raise ValueError(
+                f"coverage is for '{self.coverage.line}' but the draft's "
+                f"product_line is '{self.product_line}'"
+            )
+        return self
+
+
+def _oneof_to_anyof(node: object) -> None:
+    """Rewrite JSON-Schema ``oneOf`` to ``anyOf`` in place, dropping the
+    ``discriminator`` keyword alongside it."""
+    if isinstance(node, dict):
+        if "oneOf" in node:
+            node["anyOf"] = node.pop("oneOf")
+        node.pop("discriminator", None)
+        for value in node.values():
+            _oneof_to_anyof(value)
+    elif isinstance(node, list):
+        for item in node:
+            _oneof_to_anyof(item)
+
+
+# Identity/versioning/verification fields the database owns — the extractor must
+# never see them, or it fills UUID slots with brochure reference numbers.
+SERVER_MANAGED_FIELDS = ("id", "policy_id", "version", "verified_at")
+
+
+def policy_draft_schema() -> dict:
+    """OpenAI structured output rejects the ``oneOf`` that Pydantic emits for
+    the discriminated ``coverage`` union; rewrite it to the supported ``anyOf``
+    form. The ``line`` Literal still drives validation when the returned dict is
+    re-parsed through ``PolicyDraft``. Server-managed fields are dropped so the
+    model only extracts brochure facts."""
+    schema = PolicyDraft.model_json_schema()
+    _oneof_to_anyof(schema)
+    properties = schema.get("properties", {})
+    for field in SERVER_MANAGED_FIELDS:
+        properties.pop(field, None)
+    if "required" in schema:
+        schema["required"] = [
+            name for name in schema["required"] if name not in SERVER_MANAGED_FIELDS
+        ]
+    return schema

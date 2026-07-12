@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Policy ingestion — review</title>
+<style>
+  :root { --accent:#0f766e; --border:#e5e7eb; --muted:#6b7280; --bg:#fafaf9; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:#1a1a1a; }
+  main { max-width:960px; margin:0 auto; padding:1rem 1rem 4rem; }
+  h1 { font-size:1.3rem; color:#0b5a54; }
+  h2 { font-size:1.05rem; margin:1.6rem 0 .5rem; }
+  section { background:#fff; border:1px solid var(--border); border-radius:12px; padding:1rem 1.2rem; margin-bottom:1rem; }
+  label { display:block; font-size:.8rem; color:var(--muted); margin:.6rem 0 .2rem; }
+  input,select,textarea,button { font:inherit; }
+  input,select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; width:100%; max-width:420px; background:#fff; }
+  textarea { width:100%; min-height:340px; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:ui-monospace,monospace; font-size:.82rem; }
+  button { cursor:pointer; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 16px; margin-right:8px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:#b91c1c; border-color:#b91c1c; }
+  .tabs button.active { border-color:var(--accent); color:#0b5a54; font-weight:600; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .item { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:8px 0; cursor:pointer; }
+  .item:hover { border-color:var(--accent); }
+  .meta { font-size:.78rem; color:var(--muted); }
+  .msg { font-size:.85rem; margin-top:8px; white-space:pre-wrap; }
+  .msg.ok { color:#15803d; } .msg.err { color:#b91c1c; } .msg.warn { color:#b45309; }
+  a { color:var(--accent); }
+  button:disabled { opacity:.6; cursor:progress; }
+  .spinner { display:inline-block; width:13px; height:13px; margin-right:8px;
+    border:2px solid rgba(255,255,255,.45); border-top-color:#fff;
+    border-radius:50%; vertical-align:-2px; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Policy ingestion — review</h1>
+  <p class="meta">Upload a brochure, review the extracted draft, approve to publish.
+     Nothing goes live without approval.</p>
+
+  <section>
+    <h2>1 · Upload a document</h2>
+    <form id="upload-form">
+      <label>Insurer (optional — normally detected from the document itself)</label>
+      <select id="insurer"></select>
+      <label>Document (PDF, .txt, .md)</label>
+      <input type="file" id="file" required accept=".pdf,.txt,.md" />
+      <label>Document type</label>
+      <select id="doc-type">
+        <option value="brochure">brochure</option>
+        <option value="product_summary">product summary</option>
+        <option value="policy_contract">policy contract</option>
+      </select>
+      <div style="margin-top:12px">
+        <button class="primary" type="submit" id="upload-btn">Upload &amp; extract</button>
+      </div>
+      <div class="msg" id="upload-msg"></div>
+    </form>
+  </section>
+
+  <section id="queue-section" style="display:none">
+    <h2>2 · Review queue</h2>
+    <p class="meta">New uploads open automatically in step 3 below — these tabs are for
+       coming back to earlier runs.</p>
+    <div class="row tabs" id="tabs">
+      <button data-status="pending_review" class="active">pending review</button>
+      <button data-status="extraction_skipped">extraction skipped</button>
+      <button data-status="extraction_failed">extraction failed</button>
+      <button id="refresh" title="refresh">↻</button>
+    </div>
+    <div id="queue"></div>
+  </section>
+
+  <section id="detail" style="display:none">
+    <h2>3 · Review draft <span class="meta" id="detail-meta"></span></h2>
+    <p class="meta">Edit the draft JSON below — confirm <code>insurer_name</code> matches the
+       document (new insurers are created automatically on publish). Validated against the
+       policy schema on approve; coverage must match the product line; amounts are PHP.
+       <a id="doc-link" target="_blank">Open the source document</a></p>
+    <textarea id="draft"></textarea>
+    <label>Reviewed by</label>
+    <input id="reviewer" value="reviewer" />
+    <div style="margin-top:12px">
+      <button class="primary" id="approve">Approve &amp; publish</button>
+      <button class="danger" id="reject">Reject</button>
+    </div>
+    <div class="msg" id="detail-msg"></div>
+  </section>
+</main>
+
+<script>
+const state = { status: "pending_review", runId: null };
+const $ = (id) => document.getElementById(id);
+
+function adminToken() {
+  return sessionStorage.getItem("admin_token") ?? "";
+}
+
+function askForToken() {
+  const token = prompt("This service requires the admin token (ADMIN_TOKEN):");
+  if (token) sessionStorage.setItem("admin_token", token.trim());
+  return Boolean(token);
+}
+
+function withToken(url) {
+  const token = adminToken();
+  return token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url;
+}
+
+const DRAFT_TEMPLATE = {
+  name: "", insurer_name: "", product_line: "travel",
+  summary: "",
+  premium_min: null, premium_max: null, premium_frequency: "single",
+  eligibility: { age_min: null, age_max: null },
+  coverage: { line: "travel", medical_limit: null, trip_cancellation_limit: null,
+              covid_covered: null, schengen_compliant: null, destinations: null,
+              max_trip_days: null },
+  exclusions: [], riders: [],
+};
+
+async function api(path, options = {}) {
+  options.headers = { ...(options.headers ?? {}) };
+  if (adminToken()) options.headers["authorization"] = `Bearer ${adminToken()}`;
+  let response = await fetch(path, options);
+  if (response.status === 401 && askForToken()) {
+    options.headers["authorization"] = `Bearer ${adminToken()}`;
+    response = await fetch(path, options);
+  }
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(JSON.stringify(body.detail ?? body, null, 2));
+  return body;
+}
+
+async function loadInsurers() {
+  const insurers = await api("/insurers");
+  $("insurer").innerHTML =
+    `<option value="">— detect from document —</option>` +
+    insurers.map((i) => `<option value="${i.slug}">${i.name}</option>`).join("");
+}
+
+function showQueue() {
+  $("queue-section").style.display = "block";
+}
+
+async function revealQueueIfAnyRuns() {
+  // Progressive disclosure: a fresh page is just step 1; the queue appears
+  // only when there is actually something to review (or after an upload).
+  for (const status of ["pending_review", "extraction_skipped", "extraction_failed"]) {
+    const runs = await api(`/reviews?status=${status}`);
+    if (runs.length) {
+      state.status = status;
+      document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
+        b.classList.toggle("active", b.dataset.status === status));
+      showQueue();
+      await loadQueue();
+      return;
+    }
+  }
+}
+
+async function loadQueue() {
+  const runs = await api(`/reviews?status=${state.status}`);
+  $("queue").innerHTML = runs.length
+    ? runs.map((r) => `
+        <div class="item" onclick="openRun('${r.id}')">
+          <strong>${r.insurer_name ?? "(insurer from document)"}</strong> · ${r.doc_type}
+          <div class="meta">run ${r.id} · model ${r.model} · ${r.created_at ?? ""}</div>
+        </div>`).join("")
+    : `<p class="meta">Nothing with status “${state.status}”.</p>`;
+}
+
+async function openRun(runId) {
+  state.runId = runId;
+  const run = await api(`/reviews/${runId}`);
+  const output = run.output ?? {};
+  const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
+  if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
+  $("draft").value = JSON.stringify(draft, null, 2);
+  $("detail-meta").textContent =
+    `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}`;
+  $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
+  const msg = $("detail-msg");
+  if (output.error) {
+    msg.className = "msg err";
+    msg.textContent =
+      `Extraction failed — draft below is an empty template.\n${output.error}\n` +
+      "Fix the cause (model name / API key) and re-upload the same file to retry.";
+  } else if (run.status === "extraction_skipped") {
+    msg.className = "msg warn";
+    msg.textContent =
+      "No LLM key configured, so extraction was skipped — the LLM never ran and " +
+      "the draft below is a blank template. Fill it in from the source document " +
+      "(shown one click away), or set OPENAI_API_KEY / ANTHROPIC_API_KEY for the " +
+      "ingestion service and re-upload the same file to auto-extract.";
+  } else {
+    msg.className = "msg";
+    msg.textContent = "";
+  }
+  $("detail").style.display = "block";
+  $("detail").scrollIntoView({ behavior: "smooth" });
+}
+
+$("upload-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = new FormData();
+  data.append("file", $("file").files[0]);
+  data.append("insurer_slug", $("insurer").value);
+  data.append("doc_type", $("doc-type").value);
+  const msg = $("upload-msg");
+  const btn = $("upload-btn");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>Working…`;
+  msg.className = "msg";
+  msg.textContent = "Uploading and parsing… PDFs go through docling's layout model " +
+    "(up to a minute or two on first use), then LLM extraction. Stay on this page.";
+
+  try {
+    const result = await api("/documents", { method: "POST", body: data });
+    msg.className = "msg ok";
+    msg.textContent =
+      `Done — parsed with ${result.parser} (${result.characters_parsed} chars), ` +
+      `status: ${result.status}. Opening it for review below…` +
+      (result.document_reused ? "\nSame file as an earlier upload — re-extracted as a fresh run." : "") +
+      (result.parser_note ? `\n⚠ ${result.parser_note}` : "");
+    state.status = result.status;
+    document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
+      b.classList.toggle("active", b.dataset.status === state.status));
+    showQueue();
+    await loadQueue();
+    await openRun(result.extraction_run_id);  // next step is unmissable
+  } catch (error) {
+    msg.className = "msg err";
+    msg.textContent = error.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Upload &amp; extract";
+  }
+});
+
+$("tabs").addEventListener("click", async (event) => {
+  const status = event.target.dataset?.status;
+  if (!status) return;
+  state.status = status;
+  document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
+    b.classList.toggle("active", b === event.target));
+  await loadQueue();
+});
+$("refresh").addEventListener("click", loadQueue);
+
+$("approve").addEventListener("click", async () => {
+  const msg = $("detail-msg");
+  try {
+    const draft = JSON.parse($("draft").value);
+    delete draft._raw_text_excerpt;
+    const result = await api(`/reviews/${state.runId}/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ draft, reviewed_by: $("reviewer").value }),
+    });
+    msg.className = "msg ok";
+    msg.textContent = `Published: ${result.published.slug}`;
+    $("detail").style.display = "none";
+    await loadQueue();
+  } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
+});
+
+$("reject").addEventListener("click", async () => {
+  const msg = $("detail-msg");
+  try {
+    await api(`/reviews/${state.runId}/reject`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reviewed_by: $("reviewer").value }),
+    });
+    msg.className = "msg ok"; msg.textContent = "Rejected.";
+    $("detail").style.display = "none";
+    await loadQueue();
+  } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
+});
+
+loadInsurers().then(revealQueueIfAnyRuns).catch((error) => {
+  showQueue();
+  $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+# Deployment compose — pulls pre-built images from a registry (no source needed).
+#
+# On the BUILD machine (this repo), publish the images once:
+#   IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
+#
+# On the TARGET machine (only these two files + your .env needed):
+#   1. cp .env.example .env   &&   edit .env (secrets, public URLs)
+#   2. docker login ghcr.io   (if the images are private)
+#   3. docker compose --env-file .env up -d
+#
+# Published to the host: pwa :5173, api :8000, ingestion admin :8003.
+# postgres / agent / mcp-server stay on the internal network only.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insurance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insurance}
+      POSTGRES_DB: ${POSTGRES_DB:-insurance}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insurance} -d ${POSTGRES_DB:-insurance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-migrate:${IMAGE_TAG:-latest}
+    restart: "no"
+    command: ["alembic", "-c", "db/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      AGENT_URL: http://agent:8001
+      MCP_HTTP_URL: http://mcp-server:8002
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  agent:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-agent:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      MCP_SERVER_URL: http://mcp-server:8002/mcp
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-insurance-recommender}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  mcp-server:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-mcp-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      MCP_ALLOWED_HOSTS: mcp-server:8002,localhost:8002,127.0.0.1:8002
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ingestion:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-ingestion:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      DOCS_DIR: /data/uploads
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      # REQUIRED for any non-local deploy — protects the ingestion/admin surface.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "${INGESTION_PORT:-8003}:8003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  pwa:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-pwa:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    # Vite reads VITE_API_URL at startup, so the browser must be able to reach
+    # this URL — set it to the API's PUBLIC address on the target host.
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "${PWA_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:

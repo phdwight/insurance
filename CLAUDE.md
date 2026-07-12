@@ -1,0 +1,67 @@
+# Engineering conventions
+
+Guidance for AI-assisted and human development on this repo. Read alongside `docs/`.
+
+## Architecture decisions in force
+
+- **Catalog drives the conversation.** Never reintroduce static intake forms or hard-coded question lists. Questions exist only because current candidate policies disagree on an attribute (`agent/discriminators.py`). New differentiating policy fields get a registry entry, not a form field.
+- **Abstractions are introduced on trigger, not speculatively.** Current seams (module functions, monkeypatchable in tests) are deliberate. Introduce `Protocol`-based abstractions ONLY when a concrete trigger appears:
+  - a second catalog source (anything beyond the MCP policy-catalog server) → introduce a `CatalogClient` protocol in `agent/`,
+  - a model-provider abstraction beyond `init_chat_model` strings (e.g. self-hosted models, per-tenant routing) → introduce an `LLMProvider` protocol in `agent/llm.py`,
+  - a second ingestion source type with different parsing (insurer API feeds, scraping) → protocol in `ingestion/`.
+  Until then, keep functions flat. Do not add interfaces "for testability" — tests already patch the module seams.
+- **Verification is layered and mandatory:** SQL truth → programmatic checks (`agent/verify.py`) → cross-provider unanimous LLM panel (`agent/verifier.py`). New user-visible claims about policies must be grounded in catalog fields and pass through these layers.
+- **Guided mode must always work with zero LLM keys.** Any new question type needs a deterministic parser, and choice options must round-trip through their own parser (tested in `test_discriminators.py`).
+- **Anti-loop guardrails are load-bearing** (`MAX_QUESTIONS`, `MAX_BOOTSTRAP_TURNS`, `MAX_TURNS`, `recursion_limit`). Don't remove; extend tests if you change them.
+
+## Code style
+
+- SOLID/DRY/clean code; but cohesion over ceremony — no speculative layers (see trigger rule above).
+- All LLM prompts, structured-output contracts, and user-facing copy live in `agent/prompts.py`. No prompt or user-facing string literals inside node/logic modules.
+- Model tiers: writer = frontier, extractor = small, judges = small but ≥2 and cross-provider (documented in `.env.example`). Keep new LLM call sites consistent with this.
+- **LLM structured-output contracts** (lessons already paid for): strip server-managed fields (`id`, `version`, `verified_at`…) from extraction schemas so models can't fill them with document noise; keep schemas provider-compatible — OpenAI rejects `oneOf`/`discriminator` (rewrite to `anyOf`) and strict json_schema can't express open-ended maps (use `method="function_calling"`); partial extractions go to human review, never discarded; normalize printed formats (money like `₱2.5M`, dates like `06-Apr-2025`) deterministically and let genuinely unparseable values fail validation loudly.
+- Python >= 3.14, `uv` workspace. After changing any `pyproject.toml`, run `uv lock` and commit `uv.lock` (CI uses `--locked`).
+- Every recommendation surface must carry `verified_at`, `source_url`, and the informational-only disclaimer (PH Insurance Commission positioning: suggest + compare, never solicit or bind).
+
+## Verification before commit
+
+`uv run ruff check .` and `uv run pytest` must pass; PWA changes also need `npm run build` in `pwa/`.
+
+## Decision log (owner-confirmed)
+
+Product and process decisions made by the project owner across sessions. Don't relitigate these without asking.
+
+### Product
+- **Market:** Philippines first. Positioning is suggest + compare only — never quote, bind, sell, or solicit (Insurance Commission licensing line). Every result carries `verified_at`, `source_url`, and an informational-only disclaimer.
+- **Product lines (MVP):** life, health, travel, pet.
+- **Policy data intake:** manual/document upload (public brochures, PDFs with tables) → parse → LLM extraction → **mandatory human review** → publish. No insurer APIs or scraping for MVP. Tables are extracted into structured JSONB fields and queried with SQL — they never reach the embedder.
+- **The insurer is detected from the document, not pre-declared.** Extraction reads `insurer_name` off the brochure, the reviewer confirms it, and publish get-or-creates the insurer — that's how new insurers enter the catalog. Never make the uploader pre-select from a dropdown of existing insurers.
+- **Re-uploading the same document is a feature, not an error.** Hash-dedupe reuses the stored file, but each upload creates a fresh extraction run (the redo workflow after a poor parse/extraction). Double-publish stays blocked by the policy slug conflict check.
+- **Parser fallbacks must be visible.** A docling→pypdf fallback carries its reason into the upload response (`parser_note`) and the reviewer UI. Silent quality downgrades are bugs.
+- **Admin/reviewer UX:** progressive disclosure (queue hidden until runs exist), new uploads auto-open for review, long operations show a busy state with honest text — no fake progress percentages for server-side work.
+- **Seed data is fictional and labeled "(Demo)"** until real policies are hand-entered from brochures. Never fabricate real insurer policy details.
+- **UX:** dual intake — free-text (LLM extraction) and catalog-sourced category chips with live policy counts. Choice questions render as tap chips, numeric questions as numeric inputs; free typing always remains available. The UI never advertises a category the catalog can't serve.
+- **No-match is a valid outcome** — presented honestly, never a forced fit.
+
+### Architecture & stack
+- **Monorepo** (single repo, uv workspace + npm PWA); split only on a concrete trigger.
+- **Stack:** Postgres + pgvector, LangGraph, FastAPI, React/Vite PWA, MCP boundary between agent and catalog.
+- **Python floor: >= 3.14** (owner decision; Docker/CI run 3.14).
+- **Embeddings: voyage-3.5 @ 1024 dims** (`vector(1024)`); optional — search falls back to SQL ranking without a key.
+- **PDF parsing: docling primary, pypdf fallback** (owner decision). Docling's table-structure markdown is worth its heavy model dependencies for brochure tables; `DOCLING_ENABLED=false` forces the light path; parser used is recorded in `parse_status`.
+- **LLM access is provider-agnostic** via `init_chat_model` env strings; LangSmith for tracing.
+- **Multi-LLM verifier panel:** explanations only; 2+ judges, unanimous vote, cross-provider; failed reasons dropped silently (never drops a policy).
+- **Dynamic elicitation over static forms** — the catalog is fetched first and questions derive from candidate disagreement (see Architecture decisions above).
+
+### Security & retention
+- **Ingestion data surface is token-gated** (`ADMIN_TOKEN`, constant-time compare, bearer or `?token=`); `/health` and the data-free `/admin` shell stay open. Empty token = open = local dev only. New ingestion endpoints must take the `Protected` dependency.
+- **Conversation retention:** `app.sessions` tracks last-seen per thread; an hourly agent task purges checkpoint rows idle past `SESSION_TTL_DAYS` (default 30) — DPA minimization, not a conversation timeout. Retention failures log and retry; they never take the service down.
+
+### Process
+- **Documentation, diagram, implementation, and tests move together.** Any change to the agent graph or a flow must be reflected in the same commit in `docs/03-agent-design.md`, `docs/agent-graph.drawio`, and the tests. No inconsistencies between what's documented, drawn, implemented, and tested.
+- **Tests must be functional and cross-layer**, not trivial (SSE conversation tests, MCP-protocol tests, proxy tests, real-seed integration). Trivial import/health-only tests are unwelcome except as smoke tests for empty skeleton services.
+- **Prompts and user-facing copy live in `agent/prompts.py`** — never inline in logic modules.
+- **Architecture diagrams** live in `docs/*.drawio` (`agent-graph.drawio` for the LangGraph agent, `ingestion-pipeline.drawio` for the ingestion flow) and must be kept in sync with implementation changes; layout uses clear lanes with no line crossings or label overlaps. New flows get a diagram — everything is documented.
+- **Git:** work is committed locally by the assistant; the owner pushes from their machine (`git push`). After dependency changes, the owner runs `uv lock` before pushing (CI uses `--locked`).
+- **Dependency currency is automated:** a weekly GitHub Actions job (`dependency-currency.yml`) runs `uv lock --upgrade` and `npm outdated`, opening/updating a "dependencies"-labeled issue when anything falls behind latest stable and closing it when current.
+- **Docker:** in-cluster MCP calls require the hostname allowlisted via `MCP_ALLOWED_HOSTS` (421 otherwise). Rebuild images before re-seeding — `docker compose run` uses the built image, not the working tree.

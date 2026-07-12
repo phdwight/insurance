@@ -1,0 +1,132 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insurance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insurance}
+      POSTGRES_DB: ${POSTGRES_DB:-insurance}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insurance} -d ${POSTGRES_DB:-insurance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: db
+    command: ["alembic", "-c", "db/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: api
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      AGENT_URL: http://agent:8001
+      MCP_HTTP_URL: http://mcp-server:8002
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: agent
+    command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      MCP_SERVER_URL: http://mcp-server:8002/mcp
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-insurance-recommender}
+    ports:
+      - "8001:8001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: mcp-server
+    command: ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      MCP_ALLOWED_HOSTS: mcp-server:8002,localhost:8002,127.0.0.1:8002
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    ports:
+      - "8002:8002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: ingestion
+        APT_PACKAGES: "libgl1 libglib2.0-0"
+    command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      DOCS_DIR: /data/uploads
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "8003:8003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  pwa:
+    build:
+      context: ./pwa
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+
+volumes:
+  pgdata:
+  uploads:

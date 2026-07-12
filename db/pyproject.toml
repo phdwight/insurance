@@ -1,0 +1,22 @@
+[project]
+name = "insurance-db"
+version = "0.1.0"
+description = "Database migrations (Alembic)"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pyyaml>=6.0",
+    "insurance-shared",
+]
+
+[tool.uv.sources]
+insurance-shared = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["migrations"]

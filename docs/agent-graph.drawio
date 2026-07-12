@@ -1,0 +1,206 @@
+<mxfile host="app.diagrams.net" modified="2026-07-11T00:00:00.000Z" agent="claude" version="24.0.0">
+  <diagram id="agent-langgraph" name="LangGraph agent">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Insurance recommendation agent — catalog-driven elicitation (agent/src/agent/graph.py)" style="text;html=1;fontSize=16;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="760" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="No static form: questions exist only because the remaining candidate policies disagree on an attribute." style="text;html=1;fontSize=11;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="38" width="760" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ===== main spine (x centered at 760) ===== -->
+        <mxCell id="start" value="START&#10;(user message)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="685" y="25" width="150" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ingest" value="ingest&#10;update NeedsProfile&#10;from message" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="110" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="match" value="match&#10;fetch REAL candidates from&#10;the catalog (early —&#10;partial profile is fine)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="250" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="decide" value="decide&#10;DISCRIMINATOR ENGINE&#10;narrow by answers,&#10;pick best-splitting question" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="660" y="400" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="verify" value="verify&#10;GUARDRAIL: age + budget&#10;checked vs actual fields" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="560" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="explain" value="explain&#10;reasons grounded ONLY in&#10;verified fields; honest no-match" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="680" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="panel" value="verify_explanations&#10;MULTI-LLM PANEL&#10;2+ judges, unanimous per reason" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="810" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="present" value="present&#10;structured payload + disclaimer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="940" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="endfinal" value="END&#10;recommendations or&#10;honest no-match" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="680" y="1040" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== left column ===== -->
+        <mxCell id="bootstrap" value="ask_bootstrap&#10;&quot;What would you like&#10;to protect?&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="115" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mcp-lines" value="MCP: list_product_lines&#10;options = lines with published&#10;policies (static fallback)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="115" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e-mcp-lines" style="dashed=1;html=1;strokeColor=#666666;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="bootstrap" target="mcp-lines">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="endturn-b" value="END (turn)&#10;await user answer" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="380" y="235" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ask" value="ask_question&#10;the ONE question that best&#10;splits remaining candidates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="160" y="410" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="endturn" value="END (turn)&#10;await user answer" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="180" y="560" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== right column ===== -->
+        <mxCell id="mcp" value="MCP server&#10;policy-catalog&#10;:8002/mcp" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="245" width="140" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note-ingest" value="guided: pending answer parsed by the discriminator that asked it (no LLM needed)&#10;freeform: LLM extraction (small model, never guesses), merged non-destructively" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="95" width="290" height="95" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note-decide" value="deterministic, no LLM:&#10;• attributes ALL candidates share are never asked (e.g. all cover COVID)&#10;• best splitter = most even partition&#10;• stops at ≤3 candidates, no splitter left, or 5-question budget&#10;• budget question = last resort&#10;• empty set = honest no-match" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="390" width="290" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="judge1" value="Judge A&#10;e.g. Claude Haiku" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9673a6;dashed=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="790" width="140" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="judge2" value="Judge B&#10;e.g. GPT-4o-mini" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9673a6;dashed=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="855" width="140" height="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="Orange = deterministic discriminator engine (questions come from the catalog)&#10;Purple = verification layers (programmatic guardrail + multi-LLM panel)&#10;Guided mode runs end-to-end with zero LLM keys; free-form needs a provider key" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#f5f5f5;strokeColor=#666666;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="990" width="300" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- ===== edge annotations (plain text, positioned in clear space) ===== -->
+        <mxCell id="lbl-noline" value="no line yet" style="text;html=1;fontSize=10;align=center;" vertex="1" parent="1">
+          <mxGeometry x="580" y="118" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-lineknown" value="line(s) known" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="775" y="200" width="110" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-mcpcall" value="search_policies + get_policy&#10;(full records, per line, parallel)" style="text;html=1;fontSize=10;align=center;" vertex="1" parent="1">
+          <mxGeometry x="890" y="240" width="230" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-split" value="&gt;3 candidates and&#10;a splitter exists" style="text;html=1;fontSize=10;align=center;" vertex="1" parent="1">
+          <mxGeometry x="430" y="398" width="200" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-finalize" value="narrowed / no splitter left /&#10;question budget spent" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="775" y="505" width="200" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-loop" value="next user message&#10;re-enters ingest&#10;(session checkpointed)" style="text;html=1;fontSize=10;align=left;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="68" y="360" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-grounded1" value="grounded?" style="text;html=1;fontSize=9;align=center;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="985" y="795" width="80" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-grounded2" value="grounded?" style="text;html=1;fontSize=9;align=center;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="985" y="862" width="80" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- ===== spine edges (straight, vertical) ===== -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="start" target="ingest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ingest" target="match">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="match" target="decide">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="decide" target="verify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="verify" target="explain">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="explain" target="panel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="panel" target="present">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="present" target="endfinal">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== branch edges (straight, horizontal) ===== -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="ingest" target="bootstrap">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="decide" target="ask">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ask" target="endturn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6b" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="bootstrap" target="endturn-b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eloop2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;exitX=0;exitY=0.5;entryX=0.15;entryY=0;" edge="1" parent="1" source="endturn-b" target="ingest">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="40" y="260" />
+              <mxPoint x="40" y="86" />
+              <mxPoint x="690" y="86" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== loop back to next turn (far-left lane, crosses nothing) ===== -->
+        <mxCell id="eloop" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" edge="1" parent="1" source="endturn" target="ingest">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="645" />
+              <mxPoint x="55" y="645" />
+              <mxPoint x="55" y="92" />
+              <mxPoint x="720" y="92" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== right-column connectors (straight, horizontal, dashed) ===== -->
+        <mxCell id="e-mcp" style="dashed=1;html=1;strokeColor=#666666;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="match" target="mcp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-note-ingest" style="dashed=1;endArrow=none;html=1;strokeColor=#d6b656;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="ingest" target="note-ingest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-note-decide" style="dashed=1;endArrow=none;html=1;strokeColor=#d6b656;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="decide" target="note-decide">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-judge1" style="dashed=1;html=1;strokeColor=#9673a6;exitX=1;exitY=0.25;entryX=0;entryY=0.5;" edge="1" parent="1" source="panel" target="judge1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-judge2" style="dashed=1;html=1;strokeColor=#9673a6;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="1" source="panel" target="judge2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,236 @@
+# DEMO SEED DATA — fictional insurers and policies for pipeline validation only.
+# Replace with hand-entered real PH policies (from public brochures) before any
+# user-facing use. Format mirrors shared.catalog models.
+
+insurers:
+  - name: Maharlika Life (Demo)
+    slug: maharlika-life-demo
+    website: https://example.com/maharlika
+  - name: Kalinga Health (Demo)
+    slug: kalinga-health-demo
+    website: https://example.com/kalinga
+  - name: Byahero Insurance (Demo)
+    slug: byahero-demo
+    website: https://example.com/byahero
+  - name: Alaga Pet Cover (Demo)
+    slug: alaga-pet-demo
+    website: https://example.com/alaga
+
+policies:
+  - insurer: maharlika-life-demo
+    product_line: life
+    name: Demo Term Life 20
+    slug: demo-term-life-20
+    version:
+      summary: >
+        20-year term life insurance with level premiums. Face amounts from
+        PHP 500,000 to PHP 5,000,000. Optional accidental death benefit rider.
+        For Filipino residents aged 18-55.
+      premium_min: 800
+      premium_max: 4500
+      premium_frequency: monthly
+      eligibility: { age_min: 18, age_max: 55, medical_exam_required: false }
+      coverage:
+        line: life
+        policy_type: term
+        face_amount_min: 500000
+        face_amount_max: 5000000
+        term_years_options: [20]
+        accidental_death_benefit: true
+      exclusions: ["Suicide within 1 year", "Pre-existing terminal illness"]
+      riders: ["Accidental death benefit", "Waiver of premium"]
+
+  - insurer: kalinga-health-demo
+    product_line: health
+    name: Demo HMO Plus
+    slug: demo-hmo-plus
+    version:
+      summary: >
+        HMO plan with PHP 200,000 annual benefit limit, inpatient and
+        outpatient coverage, PHP 4,000/day room and board, emergency coverage
+        nationwide. Pre-existing conditions covered after 12 months.
+      premium_min: 1500
+      premium_max: 3200
+      premium_frequency: monthly
+      eligibility: { age_min: 0, age_max: 64 }
+      coverage:
+        line: health
+        plan_type: hmo
+        annual_limit: 200000
+        room_and_board_limit_per_day: 4000
+        inpatient: true
+        outpatient: true
+        emergency_coverage: true
+        preexisting_covered_after_months: 12
+      exclusions: ["Cosmetic procedures", "Experimental treatments"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Asia Traveler
+    slug: demo-asia-traveler
+    version:
+      summary: >
+        Single-trip travel insurance for Asia including Japan, Korea, and
+        Southeast Asia. PHP 2,500,000 emergency medical coverage, trip
+        cancellation up to PHP 100,000, baggage loss, COVID-19 covered.
+        Trips up to 30 days.
+      premium_min: 550
+      premium_max: 1800
+      premium_frequency: single
+      eligibility: { age_min: 0, age_max: 75 }
+      coverage:
+        line: travel
+        medical_limit: 2500000
+        trip_cancellation_limit: 100000
+        baggage_loss_limit: 40000
+        covid_covered: true
+        schengen_compliant: false
+        destinations: asia
+        max_trip_days: 30
+      exclusions: ["Extreme sports", "Travel against government advisories"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Worldwide Explorer
+    slug: demo-worldwide-explorer
+    version:
+      summary: >
+        Single-trip travel insurance with worldwide coverage including the US
+        and Europe. PHP 5,000,000 emergency medical, Schengen visa compliant,
+        trip cancellation up to PHP 250,000, COVID-19 covered. Trips up to
+        60 days.
+      premium_min: 1500
+      premium_max: 4200
+      premium_frequency: single
+      eligibility: { age_min: 0, age_max: 70 }
+      coverage:
+        line: travel
+        medical_limit: 5000000
+        trip_cancellation_limit: 250000
+        baggage_loss_limit: 75000
+        covid_covered: true
+        schengen_compliant: true
+        destinations: worldwide
+        max_trip_days: 60
+      exclusions: ["Extreme sports", "Travel against government advisories"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Domestic Islands
+    slug: demo-domestic-islands
+    version:
+      summary: >
+        Budget travel protection for trips within the Philippines. PHP 500,000
+        accident and medical coverage, baggage protection, trip delays.
+        Trips up to 15 days. No COVID-19 rider.
+      premium_min: 150
+      premium_max: 450
+      premium_frequency: single
+      eligibility: { age_min: 0, age_max: 85 }
+      coverage:
+        line: travel
+        medical_limit: 500000
+        trip_cancellation_limit: 25000
+        baggage_loss_limit: 15000
+        covid_covered: false
+        schengen_compliant: false
+        destinations: domestic
+        max_trip_days: 15
+      exclusions: ["Extreme sports", "Pre-existing conditions"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Asia Long Stay
+    slug: demo-asia-long-stay
+    version:
+      summary: >
+        Extended-stay travel insurance for Asia, built for digital nomads and
+        long visits. PHP 3,000,000 medical coverage including COVID-19,
+        trips up to 90 days. For travelers aged 18-65.
+      premium_min: 900
+      premium_max: 2600
+      premium_frequency: single
+      eligibility: { age_min: 18, age_max: 65 }
+      coverage:
+        line: travel
+        medical_limit: 3000000
+        trip_cancellation_limit: 80000
+        baggage_loss_limit: 30000
+        covid_covered: true
+        schengen_compliant: false
+        destinations: asia
+        max_trip_days: 90
+      exclusions: ["Extreme sports", "Manual labor while abroad"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Schengen Select
+    slug: demo-schengen-select
+    version:
+      summary: >
+        Schengen-visa-compliant travel insurance for Europe and most of the
+        world (excludes US travel). PHP 4,000,000 medical including COVID-19,
+        trip cancellation up to PHP 150,000. Trips up to 45 days.
+      premium_min: 1200
+      premium_max: 3500
+      premium_frequency: single
+      eligibility: { age_min: 0, age_max: 70 }
+      coverage:
+        line: travel
+        medical_limit: 4000000
+        trip_cancellation_limit: 150000
+        baggage_loss_limit: 60000
+        covid_covered: true
+        schengen_compliant: true
+        destinations: worldwide_ex_us
+        max_trip_days: 45
+      exclusions: ["Extreme sports", "US destinations"]
+
+  - insurer: byahero-demo
+    product_line: travel
+    name: Demo Senior Wanderer
+    slug: demo-senior-wanderer
+    version:
+      summary: >
+        Worldwide travel insurance designed for travelers aged 60 to 80.
+        PHP 2,000,000 medical including COVID-19, Schengen compliant,
+        emergency evacuation. Trips up to 30 days.
+      premium_min: 2000
+      premium_max: 5000
+      premium_frequency: single
+      eligibility: { age_min: 60, age_max: 80 }
+      coverage:
+        line: travel
+        medical_limit: 2000000
+        trip_cancellation_limit: 100000
+        baggage_loss_limit: 40000
+        covid_covered: true
+        schengen_compliant: true
+        destinations: worldwide
+        max_trip_days: 30
+      exclusions: ["Extreme sports", "Pre-existing heart conditions"]
+
+  - insurer: alaga-pet-demo
+    product_line: pet
+    name: Demo Pet Care Basic
+    slug: demo-pet-care-basic
+    version:
+      summary: >
+        Accident and illness cover for dogs and cats aged 3 months to 9 years.
+        PHP 50,000 annual vet fee limit, 14-day waiting period for illness,
+        optional wellness add-on for vaccinations.
+      premium_min: 350
+      premium_max: 900
+      premium_frequency: monthly
+      eligibility: {}
+      coverage:
+        line: pet
+        species: [dog, cat]
+        pet_age_min_months: 3
+        pet_age_max_months: 108
+        vet_fee_annual_limit: 50000
+        accident_coverage: true
+        illness_coverage: true
+        wellness_addon_available: true
+        waiting_period_days: 14
+      exclusions: ["Pre-existing conditions", "Breeding-related costs"]

@@ -1,0 +1,165 @@
+<mxfile host="app.diagrams.net" modified="2026-07-12T00:00:00.000Z" agent="claude" version="24.0.0">
+  <diagram id="ingestion-pipeline" name="Ingestion pipeline">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Policy ingestion pipeline — upload → parse → extract → human review → publish (ingestion/src/ingestion/)" style="text;html=1;fontSize=16;fontStyle=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Nothing reaches the live catalog without human approval. The insurer is detected from the document, never pre-declared." style="text;html=1;fontSize=11;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="38" width="900" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Postgres lane (right) ===== -->
+        <mxCell id="dblane" value="Postgres — catalog schema" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontSize=12;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="130" width="300" height="880" as="geometry" />
+        </mxCell>
+        <mxCell id="tbl-docs" value="source_documents&#10;(file hash, file_ref, parse_status,&#10;insurer_id nullable until review)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="290" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="tbl-runs" value="extraction_runs&#10;(output draft, status, reviewed_by)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="560" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="tbl-catalog" value="insurers (get-or-create) ·&#10;policies · policy_versions ·&#10;policy_embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="880" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-consumers" value="published policies are immediately&#10;visible to the MCP server → agent → PWA" style="text;html=1;fontSize=10;align=left;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="950" width="250" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ===== main spine ===== -->
+        <mxCell id="start" value="Upload&#10;POST /documents (PDF · txt · md)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="660" y="80" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="parse" value="parse&#10;docling → layout markdown&#10;(tables intact); pypdf fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="180" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dedupe" value="file hash&#10;seen before?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="680" y="290" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="extract" value="LLM extraction&#10;small model, never guesses →&#10;PolicyDraft incl. insurer_name&#10;read off the document" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="420" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="run" value="extraction run recorded&#10;pending_review · extraction_skipped&#10;· extraction_failed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="660" y="550" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="review" value="human review — /admin&#10;auto-opens the new run; edit draft,&#10;confirm insurer_name, source doc&#10;one click away" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="660" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="verdict" value="approve?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="690" y="790" width="140" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="publish" value="publish (one transaction)&#10;get-or-create insurer · policy +&#10;version (published) · embedding;&#10;slug conflict blocks double-publish" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="660" y="900" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="endpub" value="LIVE&#10;in the catalog" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="690" y="1030" width="140" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===== left column ===== -->
+        <mxCell id="note-parse" value="fallback is NEVER silent: parser + reason returned (parser_note) and shown in the UI; DOCLING_ENABLED kill switch; scanned PDFs rejected honestly (OCR = future); docling needs libgl1/libglib2.0-0 (baked into the image)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="160" width="300" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="note-redo" value="re-uploading the same file is the REDO workflow: the stored file is reused, but a fresh extraction run is always created" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="295" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="note-nokey" value="no LLM key → extraction_skipped (raw text stored; reviewer drafts manually). A PARTIAL draft (e.g. insurer not stated in the document) stays pending_review for the reviewer to complete — only provider/call errors become extraction_failed. Schema handed to the model strips server-managed fields (id/version/verified_at) and printed money/dates are normalized deterministically." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="415" width="300" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="reviewer" value="Reviewer&#10;(non-engineer)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="300" y="670" width="40" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rejected" value="rejected&#10;nothing published" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="260" y="795" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== edge annotations ===== -->
+        <mxCell id="lbl-reuse" value="yes — reuse stored file" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="545" y="378" width="150" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-create" value="no — store new document" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="855" y="378" width="170" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-reject" value="reject" style="text;html=1;fontSize=10;align=center;" vertex="1" parent="1">
+          <mxGeometry x="500" y="800" width="60" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl-approve" value="approve — draft validated against&#10;the policy schema (coverage must&#10;match the product line)" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="855" y="855" width="220" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- ===== spine edges ===== -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="start" target="parse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="parse" target="dedupe">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3a" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0;exitY=0.5;entryX=0.25;entryY=0;" edge="1" parent="1" source="dedupe" target="extract">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="630" y="330" />
+              <mxPoint x="630" y="400" />
+              <mxPoint x="710" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3b" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=1;exitY=0.5;entryX=0.75;entryY=0;" edge="1" parent="1" source="dedupe" target="extract">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="890" y="330" />
+              <mxPoint x="890" y="400" />
+              <mxPoint x="810" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="extract" target="run">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="run" target="review">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="review" target="verdict">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="verdict" target="rejected">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="verdict" target="publish">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="publish" target="endpub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- reviewer + DB connectors (straight, horizontal, dashed) -->
+        <mxCell id="e-reviewer" style="dashed=1;endArrow=none;html=1;strokeColor=#9673a6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="reviewer" target="review">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-db1" style="dashed=1;html=1;strokeColor=#666666;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="dedupe" target="tbl-docs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-db2" style="dashed=1;html=1;strokeColor=#666666;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="run" target="tbl-runs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-db3" style="dashed=1;html=1;strokeColor=#666666;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="publish" target="tbl-catalog">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- legend -->
+        <mxCell id="legend" value="Purple = human-gated / transactional steps. Orange = decisions.&#10;Auth: the whole data surface requires ADMIN_TOKEN (bearer or ?token=);&#10;empty token = open, local development only." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#f5f5f5;strokeColor=#666666;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="960" width="330" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

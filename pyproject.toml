@@ -1,0 +1,61 @@
+[project]
+name = "insurance-monorepo"
+version = "0.1.0"
+description = "Agentic insurance recommender — workspace root"
+requires-python = ">=3.14"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["api", "agent", "mcp-server", "ingestion", "shared", "db"]
+
+# docling pulls in torch; PyPI's Linux torch wheel now declares nvidia-cuda-*
+# runtime deps (~GB, useless on CPU-only hosts). Pin torch to PyTorch's CPU
+# index on Linux so only the small CPU build is installed. macOS/Windows already
+# resolve to CPU wheels from the default index.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    # workspace members, so a bare `uv sync` / `uv run pytest` just works
+    "insurance-shared",
+    "insurance-api",
+    "insurance-agent",
+    "insurance-mcp-server",
+    "insurance-ingestion",
+    "insurance-db",
+]
+
+[tool.uv.sources]
+insurance-shared = { workspace = true }
+insurance-api = { workspace = true }
+insurance-agent = { workspace = true }
+insurance-mcp-server = { workspace = true }
+insurance-ingestion = { workspace = true }
+insurance-db = { workspace = true }
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+testpaths = [
+    "api/tests",
+    "agent/tests",
+    "mcp-server/tests",
+    "ingestion/tests",
+    "shared/tests",
+]
