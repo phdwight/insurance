@@ -232,6 +232,9 @@ async function openRun(runId) {
 
   const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
   if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
+  // insurer_name is required on approve; if the extractor left it null but the
+  // run has a detected insurer, pre-fill it so the reviewer can just confirm.
+  if (!draft.insurer_name && run.insurer_name) draft.insurer_name = run.insurer_name;
   $("draft").value = JSON.stringify(draft, null, 2);
   $("detail-meta").textContent =
     `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}` +
@@ -329,6 +332,21 @@ $("tabs").addEventListener("click", async (event) => {
 });
 $("refresh").addEventListener("click", loadQueue);
 
+// Turn a Pydantic 422 (JSON array of {loc,msg}) into a readable field list.
+function friendlyError(message) {
+  try {
+    const errors = JSON.parse(message);
+    if (Array.isArray(errors) && errors.length) {
+      const lines = errors.map((e) => {
+        const field = (e.loc || []).filter((x) => x !== "body" && x !== "draft").join(".");
+        return `• ${field || "(draft)"}: ${e.msg}`;
+      });
+      return "Fix these fields in the draft, then approve again:\n" + lines.join("\n");
+    }
+  } catch { /* not a validation array — show as-is */ }
+  return message;
+}
+
 $("approve").addEventListener("click", async () => {
   const msg = $("detail-msg");
   try {
@@ -343,7 +361,7 @@ $("approve").addEventListener("click", async () => {
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
     await loadQueue();
-  } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
+  } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
 });
 
 $("reject").addEventListener("click", async () => {
