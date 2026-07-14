@@ -9,7 +9,11 @@ each one should explain *why*, group related work, and be safe to act on.
 
 - The assistant **commits locally**; the owner **pushes** — unless the owner asks
   the assistant to push. Don't push to a shared branch on your own initiative.
-- If you're on the default branch and the work warrants isolation, branch first.
+- **Land work on the integration branch, deliver to a protected `main` via PR —
+  never push `main` directly.** Pushing straight to `main` defeats the squash-PR
+  flow: the commits are already there, so a later PR has nothing to merge, and a
+  protected `main` can't be force-rewritten to fix it. Let GitHub's "Squash and
+  merge" collapse the branch's history into one commit on `main`.
 - Never commit or push work you haven't lint-checked and tested (see
   `testing-verification.md`).
 
@@ -48,5 +52,8 @@ git push --force-with-lease origin <branch>
   into images/history. If a secret ever lands somewhere shared, rotate it; don't
   just delete it.
 
-**On this project:** end commit bodies with the `Co-Authored-By` trailer; after
+**On this project:** work lands on `develop` and reaches `main` only via PR
+(GitHub "Squash and merge") — **never push `main` directly** (`main` is a
+protected branch). End commit bodies with the `Co-Authored-By` trailer; after
 `pyproject.toml` changes run `uv lock` before pushing (CI uses `--locked`).
+Merging to `main` triggers the image-publish workflow.
