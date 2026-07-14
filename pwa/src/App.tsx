@@ -101,6 +101,8 @@ export default function App() {
           {recommendations && <Results recommendations={recommendations} />}
         </>
       )}
+
+      <footer className="build-stamp">build {__BUILD_ID__}</footer>
     </main>
   );
 }

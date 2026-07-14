@@ -497,3 +497,14 @@ button.link {
   white-space: nowrap;
   color: var(--accent-dark);
 }
+
+.build-stamp {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}

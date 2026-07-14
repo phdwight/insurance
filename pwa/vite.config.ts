@@ -2,7 +2,19 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Build stamp: YYYYMMDDHHmm, 24-hour UTC, computed when `vite build` runs and
+// injected as the __BUILD_ID__ global (shown in the app footer). UTC so a local
+// build and a CI build read consistently.
+const p = (n: number) => String(n).padStart(2, "0");
+const d = new Date();
+const buildId =
+  `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+  `${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
+
 export default defineConfig({
+  define: {
+    __BUILD_ID__: JSON.stringify(buildId),
+  },
   plugins: [
     react(),
     VitePWA({
