@@ -40,6 +40,13 @@ x-embedding-env: &embedding-env
   EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
   EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
 
+# LangSmith tracing — auto-picked up by LangChain/LangGraph. Shared by every
+# service that makes LLM calls (agent chat + verifier, ingestion extraction).
+x-langsmith-env: &langsmith-env
+  LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+  LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+  LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-insurance-recommender}
+
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -133,7 +140,7 @@ services:
     logging: *logging
     command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001", "--log-config", "log_config.yaml"]
     environment:
-      <<: *app-env
+      <<: [*app-env, *langsmith-env]
       LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
       VERIFIER_MODELS: ${VERIFIER_MODELS:-}
@@ -141,9 +148,6 @@ services:
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
-      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
-      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-insurance-recommender}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
@@ -233,7 +237,7 @@ services:
     # ADMIN_TOKEN. Scale with `--scale ingestion-worker=N` (SKIP LOCKED is safe).
     command: ["python", "-m", "ingestion.worker"]
     environment:
-      <<: [*app-env, *embedding-env]
+      <<: [*app-env, *embedding-env, *langsmith-env]
       DOCS_DIR: /data/uploads
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

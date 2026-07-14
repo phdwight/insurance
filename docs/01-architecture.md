@@ -77,7 +77,7 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 | LLM access | Provider-agnostic via LangChain model bindings; pick one primary provider for MVP |
 | State | LangGraph Postgres checkpointer; no Redis needed at MVP scale |
 | Deployment | Docker Compose (`docker-compose.prod.yml`, registry images): pwa, api, agent, mcp-server, ingestion, ingestion-worker, postgres; host ports from 41500; runs on a single VPS/NAS or small managed platform |
-| Observability | LangSmith (or Langfuse) for agent traces; structured logs elsewhere |
+| Observability | LangSmith tracing on every LLM call (agent chat + verifier, ingestion extraction), env-var enabled; uniform timestamped logs across the uvicorn services |
 
 ## Why MCP here (and its cost)
 

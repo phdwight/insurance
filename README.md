@@ -28,7 +28,7 @@ Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](htt
 | `VOYAGE_API_KEY` | Semantic policy search + seed-time embeddings (voyage-3.5) | Optional — without it, search falls back to SQL premium-sorted ranking | [voyageai.com](https://www.voyageai.com/) (free tier) |
 | `ANTHROPIC_API_KEY` | Agent chat + ingestion extraction (default provider) | Required for free-form chat + auto-extraction; guided mode and manual drafting work without it | [console.anthropic.com](https://console.anthropic.com/) |
 | `OPENAI_API_KEY` | Alternative LLM provider, and the default verifier panel (`openai:gpt-4o-mini`) | Optional | [platform.openai.com](https://platform.openai.com/) |
-| `LANGSMITH_API_KEY` | Agent tracing/observability | Optional | [smith.langchain.com](https://smith.langchain.com/) (free tier) |
+| `LANGSMITH_API_KEY` | LLM tracing/observability — agent chat + verifier and ingestion extraction (set `LANGSMITH_TRACING=true`) | Optional | [smith.langchain.com](https://smith.langchain.com/) (free tier) |
 | `ADMIN_TOKEN` | Locks the ingestion/reviewer surface (`:8003`) | Required before exposing beyond localhost | any secret string you choose |
 
 **Nothing is required to run the stack today** — guided mode and the pipeline work with zero keys (free-form chat and auto-extraction are what need a provider key). Postgres credentials default to `insurance`/`insurance` via compose; override in `.env` for anything non-local.
