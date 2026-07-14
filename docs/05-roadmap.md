@@ -37,10 +37,10 @@
 - **PWA idle nudge (optional):** after a few minutes of inactivity mid-questioning, offer "show best matches with what you've told me so far" (triggers the existing finalize path early)
 - Closed beta with real users; iterate on extraction quality and ranking
 
-### Status (as of 2026-07-12)
-Phases 0–4 complete: catalog + MCP server (with dynamic, catalog-driven elicitation replacing the planned static gap-check), agent with programmatic guardrail + multi-LLM verifier panel, PWA with chips/SSE/typed questions, and the full ingestion pipeline (docling parsing, LLM extraction with schema sanitization + normalization, reviewer UI at `:8003/admin` covering the "non-engineer adds a policy from a PDF in <10 minutes" exit test).
+### Status (as of 2026-07-14)
+Phases 0–4 complete: catalog + MCP server (with dynamic, catalog-driven elicitation replacing the planned static gap-check), agent with programmatic guardrail + multi-LLM verifier panel, PWA with chips/SSE/typed questions, and the full ingestion pipeline — docling parsing (OCR disabled; layout/table models baked into the image), LLM extraction with schema sanitization + normalization, an async **durable queue + dedicated worker** (parsing runs off the request path), reviewer UI at `:8003/admin` covering the "non-engineer adds a policy from a PDF in <10 minutes" exit test.
 
-Phase 5 progress: **done** — ingestion admin auth (`ADMIN_TOKEN`), session TTL purge (`SESSION_TTL_DAYS`, hourly), compare view in the PWA, PWA icons/installability. **Remaining** — replace demo seed with real PH policies (the big one), privacy notice + consent copy with counsel review, deployment to a host, analytics/error-reporting loop, load/perf pass, optional idle nudge.
+Phase 5 progress: **done** — ingestion admin auth (`ADMIN_TOKEN`), session TTL purge (`SESSION_TTL_DAYS`, hourly), compare view in the PWA, PWA icons/installability, and production deployment (`docker-compose.prod.yml` — registry images, host ports from 41500, hardened; static nginx PWA). **Remaining** — replace demo seed with real PH policies (the big one), privacy notice + consent copy with counsel review, analytics/error-reporting loop, load/perf pass, optional idle nudge.
 
 Rough total: ~3–4 months part-time solo, faster with help. Phases 1–2 can proceed in parallel with 3 if two workstreams exist.
 
@@ -75,5 +75,6 @@ Rough total: ~3–4 months part-time solo, faster with help. Phases 1–2 can pr
 | `03-agent-design.md` | LangGraph state, graph, guardrails, evals |
 | `04-pwa-ux.md` | Screens, PWA capabilities, streaming protocol |
 | `05-roadmap.md` | Phases, risks, open questions |
+| `architecture.drawio` | High-level component interaction (services, data, third-party APIs) |
 | `agent-graph.drawio` | LangGraph agent diagram (kept in sync with the graph) |
 | `ingestion-pipeline.drawio` | Ingestion pipeline diagram (kept in sync with the flow) |

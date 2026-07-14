@@ -30,3 +30,6 @@ dist/
 *.pdf
 uploads/
 *.dump
+
+# drawio desktop autosave/backup files
+.$*.bkp

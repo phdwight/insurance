@@ -47,10 +47,10 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 
 **Upload portal / reviewer UI** *(implemented at `:8003/admin`)*
 - Single static page served by the ingestion service: upload policy documents (PDF/txt/md — the insurer and product line are detected from the document, not pre-declared), review the extracted draft side-by-side with the source, approve/reject
-- Auth is a Phase 5 item — localhost-only until then
+- Auth: the whole data surface requires `ADMIN_TOKEN` (bearer or `?token=`); empty token = open, local dev only
 
 **Ingestion pipeline**
-- Async workers: document parsing → LLM extraction into policy schema → validation → human review queue → publish to catalog
+- Durable queue + dedicated worker: the upload endpoint stores the file and enqueues a run (returns immediately); a separate `ingestion-worker` process claims runs (Postgres `FOR UPDATE SKIP LOCKED`) → parse → LLM extraction into the policy schema → human review queue → validation on approve → publish to catalog. A crashed worker's in-flight run is requeued, so a restart never strands an upload
 - Details in `02-ingestion-mcp.md`
 
 **MCP Server**
@@ -76,7 +76,7 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 | Search | Hybrid: SQL filters (line, premium range, age eligibility) + pgvector semantic rerank |
 | LLM access | Provider-agnostic via LangChain model bindings; pick one primary provider for MVP |
 | State | LangGraph Postgres checkpointer; no Redis needed at MVP scale |
-| Deployment | Single VPS or small managed platform (Fly.io/Railway/Render); Docker Compose: pwa, api, agent, mcp, worker, postgres |
+| Deployment | Docker Compose (`docker-compose.prod.yml`, registry images): pwa, api, agent, mcp-server, ingestion, ingestion-worker, postgres; host ports from 41500; runs on a single VPS/NAS or small managed platform |
 | Observability | LangSmith (or Langfuse) for agent traces; structured logs elsewhere |
 
 ## Why MCP here (and its cost)

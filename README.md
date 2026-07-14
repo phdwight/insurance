@@ -4,7 +4,7 @@ A PWA where users describe their insurance needs in plain language (life, health
 
 **Market:** Philippines. **Positioning:** suggest + compare only — no quoting, binding, or selling.
 
-**Status:** Phase 1 (catalog + MCP server) built. Agent (Phase 2) and intake UI (Phase 3) are next. See [`docs/05-roadmap.md`](docs/05-roadmap.md).
+**Status:** Phases 0–4 complete and deployable — policy catalog + MCP server, LangGraph agent, PWA, and the full ingestion pipeline (async queue worker). Phase 5 (hardening) is mostly done; the main remaining item is replacing the demo seed with real PH policies. See [`docs/05-roadmap.md`](docs/05-roadmap.md).
 
 ## Structure
 
@@ -19,19 +19,19 @@ A PWA where users describe their insurance needs in plain language (life, health
 | `db/` | Alembic migrations + catalog seed script | — |
 | `shared/` | Shared Pydantic models (policy schema, coverage types) | — |
 
-Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (Python >= 3.14).
+Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (Python >= 3.14). The `ingestion/` package runs as **two** services: the web/reviewer API above and a durable queue **worker** (`python -m ingestion.worker`) that parses + LLM-extracts uploads off the request path.
 
 ## API keys
 
 | Env var | Needed for | Required? | Where to get it |
 |---|---|---|---|
 | `VOYAGE_API_KEY` | Semantic policy search + seed-time embeddings (voyage-3.5) | Optional — without it, search falls back to SQL premium-sorted ranking | [voyageai.com](https://www.voyageai.com/) (free tier) |
-| `ANTHROPIC_API_KEY` | Agent LLM calls (Phase 2+; default provider) | Not yet — required once the agent is built | [console.anthropic.com](https://console.anthropic.com/) |
-| `OPENAI_API_KEY` | Agent LLM calls (only if you switch `LLM_MODEL` to an OpenAI model) | No | [platform.openai.com](https://platform.openai.com/) |
+| `ANTHROPIC_API_KEY` | Agent chat + ingestion extraction (default provider) | Required for free-form chat + auto-extraction; guided mode and manual drafting work without it | [console.anthropic.com](https://console.anthropic.com/) |
+| `OPENAI_API_KEY` | Alternative LLM provider, and the default verifier panel (`openai:gpt-4o-mini`) | Optional | [platform.openai.com](https://platform.openai.com/) |
 | `LANGSMITH_API_KEY` | Agent tracing/observability | Optional | [smith.langchain.com](https://smith.langchain.com/) (free tier) |
 | `ADMIN_TOKEN` | Locks the ingestion/reviewer surface (`:8003`) | Required before exposing beyond localhost | any secret string you choose |
 
-**Nothing is required to run the stack today.** Postgres credentials default to `insurance`/`insurance` via compose; override in `.env` for anything non-local.
+**Nothing is required to run the stack today** — guided mode and the pipeline work with zero keys (free-form chat and auto-extraction are what need a provider key). Postgres credentials default to `insurance`/`insurance` via compose; override in `.env` for anything non-local.
 
 ## Quick start from scratch
 
@@ -51,9 +51,10 @@ docker compose run --rm migrate python db/seed.py
 ```
 
 Add real policies via the **reviewer UI at http://localhost:8003/admin**: upload a
-brochure PDF (insurer is detected from the document), review the extracted draft,
-approve to publish. The first PDF parse downloads docling's models — expect it to
-be slow once. Re-uploading the same file re-runs extraction as a fresh review.
+brochure PDF (insurer is detected from the document). The upload returns immediately
+and a background **worker** parses (docling) + LLM-extracts while the page polls;
+then review the extracted draft and approve to publish. Re-uploading the same file
+re-runs extraction as a fresh review.
 
 Verify it's alive:
 
@@ -76,6 +77,21 @@ npx @modelcontextprotocol/inspector
 With `VOYAGE_API_KEY` set in `.env` (and re-seeding), `search_policies` ranks semantically by `needs_description`; without it, results sort by premium.
 
 > The seed data is **fictional demo data** for pipeline validation. Replace `db/seed_data.yaml` with real policies (hand-entered from public insurer brochures) before anything user-facing.
+
+## Production deployment
+
+`docker-compose.prod.yml` is the single production compose. It pulls pre-built images from GHCR (or `--build`s locally), publishes host ports **from 41500** (pwa 41500, api 41501, ingestion 41502; postgres, agent, and mcp-server stay internal), and adds restart policies, log rotation, memory limits, `/health` healthchecks, and required-secret guards.
+
+```bash
+# On the BUILD machine — publish images once (multi-arch amd64+arm64):
+IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
+
+# On the TARGET host — only this file + .env are needed:
+cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+`CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser (e.g. `http://<host>:41501`, or an HTTPS domain). Front the published ports with a TLS-terminating reverse proxy for anything internet-facing. Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe).
 
 ## Local development (without Docker)
 
@@ -105,9 +121,10 @@ uv run alembic -c db/alembic.ini revision -m "..."  # create new
 - **`.python-version` conflicts** — this file should contain `3.14` for uv. If pyenv overwrites it with a venv name, run uv commands with `UV_PYTHON=3.14`.
 - **`vector` extension errors** — the Postgres container must be the `pgvector/pgvector` image (compose handles this); a plain `postgres` volume from earlier runs won't have it. `docker compose down -v` resets.
 - **Changing the embedding model** — dimension is baked into `catalog.policy_embeddings` (1024 for voyage-3.5). A different model needs a migration recreating that table plus re-seeding, and matching `EMBEDDING_MODEL`/`EMBEDDING_DIM` env vars.
-- **Upload says "parsed with pypdf" instead of docling** — the upload response's `parser_note` (also shown in `/admin`) says why. Common causes: stale ingestion image (rebuild), or docling's OpenCV needing `libgl1`/`libglib2.0-0` (compose bakes these in via `APT_PACKAGES`). `docker compose logs ingestion | grep -i docling` has the full traceback.
+- **Upload parsed with pypdf instead of docling** — the run's `parse_status` (shown in the `/admin` review detail) records the parser + fallback reason. Common causes: stale ingestion image (rebuild), or docling's OpenCV needing `libgl1`/`libglib2.0-0` (baked into the image via `APT_PACKAGES`; docling's models are baked in too). Parsing runs in the worker: `docker compose logs ingestion-worker | grep -i docling` has the full traceback.
+- **Upload stuck in "queued" / "processing"** — the `ingestion-worker` service does the parsing/extraction; make sure it's running (`docker compose ps ingestion-worker`) and check its logs. A run a crashed worker abandoned is requeued after `WORKER_STALE_SECONDS` (default 30 min).
 - **Reviewer UI auth** — set `ADMIN_TOKEN` in `.env` and the whole `:8003` data surface requires it (the page prompts for it once per browser session). Leaving it empty keeps the service open: local development only.
 
 ## Docs
 
-Plan documents live in [`docs/`](docs/): overview, architecture, ingestion/MCP design, agent design, PWA/UX, and roadmap — plus drawio diagrams of the agent graph and the ingestion pipeline, kept in sync with the implementation.
+Plan documents live in [`docs/`](docs/): overview, architecture, ingestion/MCP design, agent design, PWA/UX, and roadmap — plus drawio diagrams of the high-level architecture (`architecture.drawio`), the agent graph, and the ingestion pipeline, kept in sync with the implementation.
