@@ -41,6 +41,11 @@ functions stay flat and tests patch the module seams.
 - **Fail loud, not silent** — a fallback (a slower parser, a skipped optional
   step) carries its reason into the output/logs and the UI; never downgrade
   quality quietly.
+- **Verify the outcome, not just the routing decision.** A router that judges by
+  appearance can't see hidden state — e.g. an LLM deciding "this PDF is clean
+  text" can't tell the PDF has no extractable text *layer*. Check the actual
+  result (was the extracted text empty/placeholder?) and recover, rather than
+  trusting the router and shipping garbage downstream.
 - **Match the surrounding code** — naming, comment density, and idiom should
   read as if one person wrote the file.
 - **Small, honest units** — a function does one thing; a comment explains *why*,

@@ -18,6 +18,11 @@ Symptom: works at `localhost`, blank screen or thrown error at
 *does* work in insecure contexts), or serve over HTTPS. Don't assume localhost
 behavior generalizes to a LAN/served deployment.
 
+Related: **`window.prompt()` / `alert()` / `confirm()` are not reliable** — many
+browsers and embedded webviews block them ("prompt() is not supported"). Don't
+gate a real flow (e.g. entering an admin token) behind them; use an inline input
+in the page instead.
+
 ## Reverse-proxy / edge timeouts
 
 Proxies cap how long a single request may take (e.g. Cloudflare's free edge

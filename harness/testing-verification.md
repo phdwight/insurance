@@ -32,6 +32,12 @@ behavior**:
 - Build and run the real artifact when the change is in packaging/serving — e.g.
   build the image and hit the running container, don't infer from the Dockerfile.
 - Reproduce the original symptom, then confirm it's gone.
+- **Mocked LLM calls hide provider-specific request errors.** Tests that fake the
+  model can't see that the real provider rejects the request *shape* — e.g. an
+  OpenAI reasoning model returns `400` for forced `method="function_calling"`
+  structured output, so the step silently failed open. Drive at least one real
+  call (real model + key) before shipping an LLM feature, and prefer the default
+  structured-output method so each provider uses its native mode.
 
 ## Report honestly
 

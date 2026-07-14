@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import get_args
+from typing import Literal, get_args
 
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from shared import (
     HealthCoverage,
@@ -175,3 +175,70 @@ def policy_draft_schema() -> dict:
             name for name in schema["required"] if name not in SERVER_MANAGED_FIELDS
         ]
     return schema
+
+
+# --- Vision triage (large model looks at the PDF pages and routes) -----------
+
+VISION_TRIAGE_SYSTEM = """You are triaging an insurance policy PDF for an \
+extraction pipeline. You are shown images of its pages.
+
+Decide how the document should be turned into text:
+- route "docling": the pages are mostly selectable text and tables that a
+  layout-aware PDF parser reads accurately. Prefer this for normal digital
+  brochures — it is cheaper and more precise. Leave markdown empty.
+- route "self": the pages are image-heavy, scanned, or have complex visual
+  layout/tables a text parser would mangle or miss. Then YOU transcribe the
+  document to clean, faithful Markdown: preserve tables as Markdown tables, and
+  keep headings, premiums, coverage limits, age bands, and exclusions exactly as
+  shown. Do NOT summarize, infer, or omit content.
+
+Return the route, a one-line reason, and — only for "self" — the full Markdown."""
+
+
+class VisionTriage(BaseModel):
+    """Router output for VISION_TRIAGE_SYSTEM: how to turn the PDF into text.
+    ``markdown`` is the full transcription, populated only when route == 'self'."""
+
+    route: Literal["self", "docling"]
+    reason: str
+    markdown: str | None = None
+
+
+# --- Intake gate: classify (reject non-insurance) + redact PII ---------------
+
+INTAKE_SYSTEM = """You are the intake gate for an insurance policy catalog. You \
+are given the text of a document a user uploaded.
+
+1. Decide if it is an insurance document — a policy, brochure, product summary,
+   schedule of benefits, certificate, or similar from an insurer. Set
+   is_insurance. If it is NOT insurance-related (a resume, invoice, ID, receipt,
+   or unrelated PDF), set is_insurance=false, give a one-line reason, and stop
+   (leave redacted_text empty).
+
+2. If it IS insurance-related:
+   - category: brochure, product_summary, policy_contract, or other.
+   - redacted_text: return the FULL document text with every piece of personal
+     identifying information (PII) removed — the policyholder's/insured's name,
+     address, phone, email, birth date, and any government / policy / certificate
+     / account / reference numbers and signatures. Replace each with [REDACTED].
+     KEEP all product facts: plan/product name, the INSURER's company name,
+     premiums, coverage limits, age bands, exclusions, and riders. Do not
+     summarize or drop product content — only redact PII."""
+
+
+class DocumentIntake(BaseModel):
+    """Intake-gate output (see INTAKE_SYSTEM). redacted_text is the full document
+    with PII removed, populated only when is_insurance is true."""
+
+    is_insurance: bool
+    category: Literal["brochure", "product_summary", "policy_contract", "other"]
+    reason: str
+    redacted_text: str | None = None
+
+
+# --- Vision transcription (recovery when a text parser yields nothing) --------
+
+VISION_TRANSCRIBE_SYSTEM = """Transcribe this document's pages to clean, faithful \
+Markdown. Preserve tables as Markdown tables and keep every heading, product
+name, premium, coverage limit, benefit, age band, and exclusion exactly as
+shown. Do not summarize, infer, or omit content."""

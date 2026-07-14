@@ -90,12 +90,17 @@ class FakeRepo:
         # Force the pypdf path so pipeline tests are deterministic and fast
         # whether or not docling is installed; docling has dedicated tests.
         monkeypatch.setenv("DOCLING_ENABLED", "false")
+        # LLM-gated steps are off by default so tests are deterministic and make
+        # no real calls; the vision/intake tests opt in and mock the model.
+        monkeypatch.setenv("VISION_TRIAGE", "false")
+        monkeypatch.setenv("INTAKE_GATE", "false")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.setattr(repository, "get_or_create_source_document", self.create_document)
         monkeypatch.setattr(repository, "create_extraction_run", self.create_run)
         monkeypatch.setattr(repository, "finalize_extraction_run", self.finalize_run)
         monkeypatch.setattr(repository, "update_parse_status", self.update_parse)
+        monkeypatch.setattr(repository, "update_doc_type", self.update_doc_type)
         monkeypatch.setattr(repository, "claim_next_run", self.claim_next_run)
         monkeypatch.setattr(repository, "reclaim_stale_runs", self.reclaim_stale_runs)
         monkeypatch.setattr(repository, "get_review", self.get_review)
@@ -149,6 +154,10 @@ class FakeRepo:
     def update_parse(self, document_id, parse_status):
         self.parse_statuses = getattr(self, "parse_statuses", {})
         self.parse_statuses[document_id] = parse_status
+
+    def update_doc_type(self, document_id, doc_type):
+        self.doc_types = getattr(self, "doc_types", {})
+        self.doc_types[document_id] = doc_type
 
     def claim_next_run(self):
         for run in self.runs.values():
@@ -371,6 +380,145 @@ def test_worker_claims_queue_and_records_parse_failure(monkeypatch, tmp_path) ->
     assert "error" in run["output"]
     # the empty queue is a no-op for the worker
     assert asyncio.run(worker.process_one()) is False
+
+
+def test_vision_self_transcribes_image_heavy_pdf(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("VISION_TRIAGE", "auto")  # opt in (install defaults it off)
+
+    async def fake_triage(filename, data):
+        # large model decides it can read the image-heavy doc and transcribes it
+        return "# Voyager\n| Plan | Premium |\n|---|---|\n| A | PHP 900 |", "self", "scanned"
+
+    async def fake_extract(text):
+        assert "| Plan | Premium |" in text  # vision Markdown reached the extractor
+        return dict(VALID_DRAFT), "pending_review", "anthropic:claude-sonnet-4-5"
+
+    monkeypatch.setattr(worker.vision, "triage", fake_triage)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("scanned.pdf", make_minimal_pdf("ignored"))
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "pending_review"
+    assert run["output"]["name"] == "Demo Worldwide Voyager"
+    assert "parsed:llm-vision" in list(repo.parse_statuses.values())[-1]
+
+
+def test_vision_routes_clean_pdf_to_docling(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)  # DOCLING_ENABLED=false -> pypdf path
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("VISION_TRIAGE", "auto")
+
+    async def fake_triage(filename, data):
+        return None, "docling", "clean digital text"  # hands off to the parser
+
+    async def fake_extract(text):
+        assert "PHP 500" in text  # parser text, not vision
+        return dict(VALID_DRAFT), "pending_review", "model"
+
+    monkeypatch.setattr(worker.vision, "triage", fake_triage)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    brochure = ("BYAHERO Worldwide Voyager travel insurance. Emergency medical up to "
+                "PHP 3,000,000 including COVID-19. Trip cancellation PHP 100,000. "
+                "Premium from PHP 500. Ages 0-70. Trips up to 45 days.")
+    upload("brochure.pdf", make_minimal_pdf(brochure))
+    drain_worker()
+    parse_status = list(repo.parse_statuses.values())[-1]
+    assert "parsed:pypdf" in parse_status  # real text layer -> no vision recovery
+    assert "vision → docling" in parse_status
+
+
+def test_vision_recovers_thin_docling_text(monkeypatch, tmp_path) -> None:
+    # An image-heavy PDF where docling yields only placeholders: vision must
+    # transcribe it rather than the doc being wrongly rejected as empty.
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("VISION_TRIAGE", "auto")
+
+    async def triage(filename, data):
+        return None, "docling", "looks like a clean brochure"  # wrong guess
+
+    async def transcribe(filename, data):
+        return ("# Sun Acceler8\n20-year endowment insurance from Sun Life. Increasing "
+                "life coverage up to 228% of the face amount. Guaranteed maturity "
+                "benefit of 102%. Special bonus after 8 years. Limited pay period.")
+
+    monkeypatch.setattr(worker.vision, "triage", triage)
+    monkeypatch.setattr(worker.vision, "transcribe", transcribe)
+    # docling returns image placeholders only (thin)
+    monkeypatch.setattr(
+        worker.parsing, "extract_text",
+        lambda f, d: ("<!-- image -->\n<!-- image -->\n<!-- image -->", "docling", None),
+    )
+
+    async def fake_extract(text):
+        assert "Sun Acceler8" in text  # vision-transcribed text reached the extractor
+        return dict(VALID_DRAFT), "pending_review", "model"
+
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("sun.pdf", make_minimal_pdf("ignored"))
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "pending_review"
+    assert "parsed:llm-vision" in list(repo.parse_statuses.values())[-1]
+
+
+def test_intake_rejects_non_insurance_document(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("INTAKE_GATE", "auto")  # opt in (install defaults it off)
+
+    from ingestion.prompts import DocumentIntake
+
+    async def fake_classify(text):
+        return DocumentIntake(is_insurance=False, category="other", reason="looks like a resume")
+
+    monkeypatch.setattr(worker.intake, "classify", fake_classify)
+
+    upload("resume.txt", b"John Doe. Software engineer. 10 years experience.")
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "rejected_invalid"  # rejected outright, not extracted
+    assert "resume" in run["output"]["reason"]
+
+
+def test_intake_redacts_pii_before_extraction(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("INTAKE_GATE", "auto")
+
+    from ingestion.prompts import DocumentIntake
+
+    async def fake_classify(text):
+        assert "John Doe" in text  # the gate sees the raw text
+        return DocumentIntake(
+            is_insurance=True,
+            category="policy_contract",
+            reason="a personal policy",
+            redacted_text="Voyager Plan. Insured: [REDACTED]. Premium PHP 900.",
+        )
+
+    async def fake_extract(text):
+        assert "[REDACTED]" in text and "John Doe" not in text  # extractor only sees redacted text
+        return dict(VALID_DRAFT), "pending_review", "model"
+
+    monkeypatch.setattr(worker.intake, "classify", fake_classify)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("policy.txt", b"Voyager Plan. Insured: John Doe. Premium PHP 900.")
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "pending_review"
+    assert "PII redacted" in list(repo.parse_statuses.values())[-1]
 
 
 def test_parser_recorded_on_source_document(monkeypatch, tmp_path) -> None:

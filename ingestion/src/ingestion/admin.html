@@ -40,21 +40,27 @@
   <p class="meta">Upload a brochure, review the extracted draft, approve to publish.
      Nothing goes live without approval.</p>
 
+  <section id="token-bar" style="display:none">
+    <h2>Admin token</h2>
+    <p class="meta">This service requires the <code>ADMIN_TOKEN</code> — paste it once per browser session.</p>
+    <div class="row">
+      <input id="token-input" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"
+             style="max-width:420px" />
+      <button class="primary" id="token-save">Save</button>
+    </div>
+    <div class="msg" id="token-msg"></div>
+  </section>
+
   <section>
     <h2>1 · Upload a document</h2>
+    <p class="meta">Just drop an insurance document — the AI detects the insurer and
+       type, rejects anything that isn't insurance-related, and redacts personal
+       information before extraction.</p>
     <form id="upload-form">
-      <label>Insurer (optional — normally detected from the document itself)</label>
-      <select id="insurer"></select>
       <label>Document (PDF, .txt, .md)</label>
       <input type="file" id="file" required accept=".pdf,.txt,.md" />
-      <label>Document type</label>
-      <select id="doc-type">
-        <option value="brochure">brochure</option>
-        <option value="product_summary">product summary</option>
-        <option value="policy_contract">policy contract</option>
-      </select>
       <div style="margin-top:12px">
-        <button class="primary" type="submit" id="upload-btn">Upload &amp; extract</button>
+        <button class="primary" type="submit" id="upload-btn">Upload</button>
       </div>
       <div class="msg" id="upload-msg"></div>
     </form>
@@ -71,6 +77,7 @@
       <button data-status="extraction_skipped">extraction skipped</button>
       <button data-status="extraction_failed">extraction failed</button>
       <button data-status="failed">failed</button>
+      <button data-status="rejected_invalid">not insurance</button>
       <button id="refresh" title="refresh">↻</button>
     </div>
     <div id="queue"></div>
@@ -121,10 +128,14 @@ function adminToken() {
   return sessionStorage.getItem("admin_token") ?? "";
 }
 
-function askForToken() {
-  const token = prompt("This service requires the admin token (ADMIN_TOKEN):");
-  if (token) sessionStorage.setItem("admin_token", token.trim());
-  return Boolean(token);
+function showTokenBar(message) {
+  // Inline token entry — window.prompt() is blocked in some browsers/webviews.
+  $("token-bar").style.display = "block";
+  if (message) {
+    $("token-msg").className = "msg warn";
+    $("token-msg").textContent = message;
+  }
+  $("token-input").focus();
 }
 
 function withToken(url) {
@@ -146,21 +157,14 @@ const DRAFT_TEMPLATE = {
 async function api(path, options = {}) {
   options.headers = { ...(options.headers ?? {}) };
   if (adminToken()) options.headers["authorization"] = `Bearer ${adminToken()}`;
-  let response = await fetch(path, options);
-  if (response.status === 401 && askForToken()) {
-    options.headers["authorization"] = `Bearer ${adminToken()}`;
-    response = await fetch(path, options);
+  const response = await fetch(path, options);
+  if (response.status === 401) {
+    showTokenBar("Enter your admin token above and Save, then try again.");
+    throw new Error("Admin token required.");
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(JSON.stringify(body.detail ?? body, null, 2));
   return body;
-}
-
-async function loadInsurers() {
-  const insurers = await api("/insurers");
-  $("insurer").innerHTML =
-    `<option value="">— detect from document —</option>` +
-    insurers.map((i) => `<option value="${i.slug}">${i.name}</option>`).join("");
 }
 
 function showQueue() {
@@ -171,7 +175,7 @@ async function revealQueueIfAnyRuns() {
   // Progressive disclosure: a fresh page is just step 1; the queue appears
   // only when there is actually something to review (or after an upload).
   const statuses = ["queued", "processing", "pending_review", "extraction_skipped",
-                    "extraction_failed", "failed"];
+                    "extraction_failed", "failed", "rejected_invalid"];
   for (const status of statuses) {
     const runs = await api(`/reviews?status=${status}`);
     if (runs.length) {
@@ -213,8 +217,24 @@ async function openRun(runId) {
     return;
   }
 
+  if (run.status === "rejected_invalid") {
+    $("detail-meta").textContent = `· run ${runId} · rejected (not insurance)`;
+    $("draft").value = "";
+    msg.className = "msg err";
+    msg.textContent =
+      "Rejected — not an insurance document.\n" +
+      ((output && output.reason) || "Only insurance-related documents are accepted.");
+    $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
+    $("detail").style.display = "block";
+    $("detail").scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
   const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
   if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
+  // insurer_name is required on approve; if the extractor left it null but the
+  // run has a detected insurer, pre-fill it so the reviewer can just confirm.
+  if (!draft.insurer_name && run.insurer_name) draft.insurer_name = run.insurer_name;
   $("draft").value = JSON.stringify(draft, null, 2);
   $("detail-meta").textContent =
     `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}` +
@@ -244,9 +264,7 @@ async function openRun(runId) {
 $("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = new FormData();
-  data.append("file", $("file").files[0]);
-  data.append("insurer_slug", $("insurer").value);
-  data.append("doc_type", $("doc-type").value);
+  data.append("file", $("file").files[0]);  // insurer + type are detected by the AI
   const msg = $("upload-msg");
   const btn = $("upload-btn");
 
@@ -274,7 +292,13 @@ $("upload-form").addEventListener("submit", async (event) => {
         "it runs server-side even if you leave this page.";
     });
 
-    if (run.status === "failed") {
+    if (run.status === "rejected_invalid") {
+      msg.className = "msg err";
+      msg.textContent =
+        "Not a valid document — only insurance-related documents are accepted.\n" +
+        ((run.output && run.output.reason) || "The AI didn't recognize this as an insurance document.");
+      state.status = "rejected_invalid";
+    } else if (run.status === "failed") {
       msg.className = "msg err";
       msg.textContent =
         "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
@@ -287,13 +311,14 @@ $("upload-form").addEventListener("submit", async (event) => {
     }
     syncTabs();
     await loadQueue();
-    if (run.status !== "failed") await openRun(result.extraction_run_id);
+    if (run.status !== "failed" && run.status !== "rejected_invalid")
+      await openRun(result.extraction_run_id);
   } catch (error) {
     msg.className = "msg err";
     msg.textContent = error.message;
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Upload &amp; extract";
+    btn.innerHTML = "Upload";
   }
 });
 
@@ -306,6 +331,21 @@ $("tabs").addEventListener("click", async (event) => {
   await loadQueue();
 });
 $("refresh").addEventListener("click", loadQueue);
+
+// Turn a Pydantic 422 (JSON array of {loc,msg}) into a readable field list.
+function friendlyError(message) {
+  try {
+    const errors = JSON.parse(message);
+    if (Array.isArray(errors) && errors.length) {
+      const lines = errors.map((e) => {
+        const field = (e.loc || []).filter((x) => x !== "body" && x !== "draft").join(".");
+        return `• ${field || "(draft)"}: ${e.msg}`;
+      });
+      return "Fix these fields in the draft, then approve again:\n" + lines.join("\n");
+    }
+  } catch { /* not a validation array — show as-is */ }
+  return message;
+}
 
 $("approve").addEventListener("click", async () => {
   const msg = $("detail-msg");
@@ -321,7 +361,7 @@ $("approve").addEventListener("click", async () => {
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
     await loadQueue();
-  } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
+  } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
 });
 
 $("reject").addEventListener("click", async () => {
@@ -338,10 +378,24 @@ $("reject").addEventListener("click", async () => {
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });
 
-loadInsurers().then(revealQueueIfAnyRuns).catch((error) => {
-  showQueue();
-  $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
-});
+function saveToken() {
+  const value = $("token-input").value.trim();
+  if (!value) return;
+  sessionStorage.setItem("admin_token", value);
+  $("token-input").value = "";
+  $("token-bar").style.display = "none";
+  init();  // retry now that we have a token
+}
+$("token-save").addEventListener("click", saveToken);
+$("token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveToken(); });
+
+function init() {
+  revealQueueIfAnyRuns().catch((error) => {
+    showQueue();
+    $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
+  });
+}
+init();
 </script>
 </body>
 </html>

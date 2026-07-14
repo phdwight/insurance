@@ -241,7 +241,11 @@ services:
     environment:
       <<: [*app-env, *embedding-env, *langsmith-env]
       DOCS_DIR: /data/uploads
+      # Vision triage uses the frontier LLM_MODEL; extraction uses the small one.
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      VISION_TRIAGE: ${VISION_TRIAGE:-auto}  # 'false' sends every PDF straight to docling
+      INTAKE_GATE: ${INTAKE_GATE:-auto}  # LLM rejects non-insurance docs + redacts PII; 'false' disables
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
