@@ -87,9 +87,9 @@ async def triage(filename: str, data: bytes) -> tuple[str | None, str, str]:
         content: list[dict] = [{"type": "text", "text": VISION_TRIAGE_SYSTEM}]
         content += [_image_block(png, provider) for png in pages]
 
-        model = init_chat_model(_model_name()).with_structured_output(
-            VisionTriage, method="function_calling"
-        )
+        # Default structured-output method (json_schema on OpenAI, tools on
+        # Anthropic) — forcing function_calling breaks OpenAI reasoning models.
+        model = init_chat_model(_model_name()).with_structured_output(VisionTriage)
         result: VisionTriage = await model.ainvoke([HumanMessage(content=content)])
 
         if result.route == "self" and result.markdown and result.markdown.strip():

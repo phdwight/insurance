@@ -38,9 +38,10 @@ async def classify(document_text: str) -> DocumentIntake:
     the mandatory human review is still the backstop."""
     excerpt = document_text[:INTAKE_MAX_CHARS]
     try:
-        gate = init_chat_model(_model_name()).with_structured_output(
-            DocumentIntake, method="function_calling"
-        )
+        # Default structured-output method (json_schema on OpenAI, tools on
+        # Anthropic) — do NOT force function_calling: OpenAI reasoning models
+        # (gpt-5.x) reject function tools with reasoning_effort in chat.
+        gate = init_chat_model(_model_name()).with_structured_output(DocumentIntake)
         return await gate.ainvoke([("system", INTAKE_SYSTEM), ("human", excerpt)])
     except Exception as error:
         return DocumentIntake(
