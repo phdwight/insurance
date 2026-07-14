@@ -19,8 +19,7 @@ import json
 import os
 from typing import Any
 
-from langchain.chat_models import init_chat_model
-
+from agent.llm import chat_model
 from agent.prompts import FALLBACK_REASON, JUDGE_SYSTEM, JudgeVerdict
 
 __all__ = ["FALLBACK_REASON", "judge_models", "panel_enabled", "verify_recommendations"]
@@ -36,7 +35,7 @@ def panel_enabled() -> bool:
 
 
 async def _judge_one(model_name: str, policy_facts: dict, claim: str) -> bool:
-    judge = init_chat_model(model_name).with_structured_output(JudgeVerdict)
+    judge = chat_model(model_name).with_structured_output(JudgeVerdict)
     prompt = f"POLICY DATA:\n{json.dumps(policy_facts, default=str)}\n\nCLAIM:\n{claim}"
     try:
         verdict = await judge.ainvoke([("system", JUDGE_SYSTEM), ("human", prompt)])

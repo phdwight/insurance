@@ -31,5 +31,8 @@ dist/
 uploads/
 *.dump
 
+# Machine-specific deploy compose (NAS)
+ugreen_compose.yml
+
 # drawio desktop autosave/backup files
 .$*.bkp

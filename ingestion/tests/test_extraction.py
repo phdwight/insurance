@@ -116,6 +116,47 @@ def test_amounts_accept_brochure_formatting() -> None:
     assert draft.coverage.baggage_loss_limit == Decimal("30000")
 
 
+def test_misplaced_top_level_fields_are_hoisted_from_coverage() -> None:
+    # Small extractors sometimes nest summary/riders/premiums/extras under
+    # coverage (seen on a real Sun Life brochure); the coverage model would drop
+    # them, losing the required top-level summary. They must be lifted back out.
+    draft = PolicyDraft.model_validate({
+        "name": "Sun Acceler8",
+        "insurer_name": "Sun Life of Canada (Philippines), Inc.",
+        "product_line": "life",
+        "coverage": {
+            "line": "life",
+            "policy_type": "endowment",
+            "maturity_benefit": "102% of Face Amount at year 20.",
+            "summary": "A 20-year endowment plan with increasing coverage.",
+            "premium_min": "PHP 12,000",
+            "riders": ["Accident and disability riders."],
+            "extras": {"bonus": "Special bonus after eight years."},
+        },
+    })
+    assert draft.summary == "A 20-year endowment plan with increasing coverage."
+    assert draft.premium_min == Decimal("12000")  # hoisted, then amount-normalized
+    assert draft.riders == ["Accident and disability riders."]
+    assert draft.extras == {"bonus": "Special bonus after eight years."}
+    # coverage keeps only its own line-specific fields
+    assert draft.coverage.policy_type == "endowment"
+    assert not hasattr(draft.coverage, "summary")
+
+
+def test_hoist_never_overwrites_a_real_top_level_value() -> None:
+    # A genuine top-level value wins over a stray nested duplicate.
+    draft = PolicyDraft.model_validate({
+        **FULL_DRAFT,
+        "summary": "Top-level summary wins.",
+        "coverage": {
+            "line": "travel",
+            "medical_limit": "3000000",
+            "summary": "nested duplicate that must be ignored",
+        },
+    })
+    assert draft.summary == "Top-level summary wins."
+
+
 def test_unparseable_amount_still_raises() -> None:
     # Genuinely bad input is not silently coerced — Pydantic surfaces the error.
     with pytest.raises(ValidationError):
