@@ -136,6 +136,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
       VISION_TRIAGE: ${VISION_TRIAGE:-auto}
+      INTAKE_GATE: ${INTAKE_GATE:-auto}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}

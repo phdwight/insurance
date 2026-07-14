@@ -155,6 +155,14 @@ def update_parse_status(document_id: str, parse_status: str) -> None:
         )
 
 
+def update_doc_type(document_id: str, doc_type: str) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE catalog.source_documents SET doc_type = :t WHERE id = :id"),
+            {"t": doc_type, "id": document_id},
+        )
+
+
 def claim_next_run() -> dict[str, Any] | None:
     """Atomically claim one 'queued' run for a worker: flip it to 'processing'
     and stamp claimed_at. FOR UPDATE SKIP LOCKED means concurrent workers never

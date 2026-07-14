@@ -17,7 +17,7 @@ from pathlib import Path
 
 import anyio
 
-from ingestion import extraction, parsing, repository, vision
+from ingestion import extraction, intake, parsing, repository, vision
 
 logger = logging.getLogger("ingestion")
 
@@ -68,11 +68,28 @@ async def _process(run_id: str, document_id: str, file_ref: str | None) -> None:
         )
         return
 
-    # Fold parser, size, and any docling->pypdf fallback reason into parse_status
-    # so the fallback stays visible in the reviewer UI.
+    # Intake gate: the LLM rejects non-insurance uploads outright and redacts PII
+    # before anything is extracted or stored.
+    redacted = False
+    if intake.intake_enabled():
+        gate = await intake.classify(document_text)
+        if not gate.is_insurance:
+            repository.update_parse_status(document_id, "rejected: not an insurance document")
+            repository.finalize_extraction_run(
+                run_id, "none", {"reason": gate.reason}, "rejected_invalid"
+            )
+            return
+        if gate.redacted_text and gate.redacted_text.strip():
+            document_text, redacted = gate.redacted_text, True
+        repository.update_doc_type(document_id, gate.category)
+
+    # Fold parser, size, redaction, and any docling->pypdf fallback reason into
+    # parse_status so it stays visible in the reviewer UI.
     parse_status = f"parsed:{parser} ({len(document_text)} chars)"
     if parser_note:
         parse_status += f" — ⚠ {parser_note}"
+    if redacted:
+        parse_status += " · PII redacted"
     repository.update_parse_status(document_id, parse_status)
 
     output, status, model = await extraction.extract_draft(document_text)

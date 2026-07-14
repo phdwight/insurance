@@ -42,11 +42,11 @@
           <mxGeometry x="680" y="290" width="160" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="extract" value="LLM extraction&#10;small model, never guesses →&#10;PolicyDraft incl. insurer_name&#10;read off the document" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="extract" value="intake gate + extraction&#10;large model: reject non-insurance +&#10;redact PII; small model → PolicyDraft&#10;(insurer_name read off the document)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="660" y="420" width="200" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="run" value="extraction run (queue)&#10;queued → processing → pending_review&#10;· extraction_skipped · extraction_failed&#10;· failed (parse failed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="run" value="extraction run (queue)&#10;queued → processing → pending_review · skipped&#10;· extraction_failed · failed (parse) ·&#10;rejected_invalid (not insurance)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="660" y="550" width="200" height="70" as="geometry" />
         </mxCell>
 

@@ -42,19 +42,14 @@
 
   <section>
     <h2>1 · Upload a document</h2>
+    <p class="meta">Just drop an insurance document — the AI detects the insurer and
+       type, rejects anything that isn't insurance-related, and redacts personal
+       information before extraction.</p>
     <form id="upload-form">
-      <label>Insurer (optional — normally detected from the document itself)</label>
-      <select id="insurer"></select>
       <label>Document (PDF, .txt, .md)</label>
       <input type="file" id="file" required accept=".pdf,.txt,.md" />
-      <label>Document type</label>
-      <select id="doc-type">
-        <option value="brochure">brochure</option>
-        <option value="product_summary">product summary</option>
-        <option value="policy_contract">policy contract</option>
-      </select>
       <div style="margin-top:12px">
-        <button class="primary" type="submit" id="upload-btn">Upload &amp; extract</button>
+        <button class="primary" type="submit" id="upload-btn">Upload</button>
       </div>
       <div class="msg" id="upload-msg"></div>
     </form>
@@ -71,6 +66,7 @@
       <button data-status="extraction_skipped">extraction skipped</button>
       <button data-status="extraction_failed">extraction failed</button>
       <button data-status="failed">failed</button>
+      <button data-status="rejected_invalid">not insurance</button>
       <button id="refresh" title="refresh">↻</button>
     </div>
     <div id="queue"></div>
@@ -156,13 +152,6 @@ async function api(path, options = {}) {
   return body;
 }
 
-async function loadInsurers() {
-  const insurers = await api("/insurers");
-  $("insurer").innerHTML =
-    `<option value="">— detect from document —</option>` +
-    insurers.map((i) => `<option value="${i.slug}">${i.name}</option>`).join("");
-}
-
 function showQueue() {
   $("queue-section").style.display = "block";
 }
@@ -171,7 +160,7 @@ async function revealQueueIfAnyRuns() {
   // Progressive disclosure: a fresh page is just step 1; the queue appears
   // only when there is actually something to review (or after an upload).
   const statuses = ["queued", "processing", "pending_review", "extraction_skipped",
-                    "extraction_failed", "failed"];
+                    "extraction_failed", "failed", "rejected_invalid"];
   for (const status of statuses) {
     const runs = await api(`/reviews?status=${status}`);
     if (runs.length) {
@@ -213,6 +202,19 @@ async function openRun(runId) {
     return;
   }
 
+  if (run.status === "rejected_invalid") {
+    $("detail-meta").textContent = `· run ${runId} · rejected (not insurance)`;
+    $("draft").value = "";
+    msg.className = "msg err";
+    msg.textContent =
+      "Rejected — not an insurance document.\n" +
+      ((output && output.reason) || "Only insurance-related documents are accepted.");
+    $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
+    $("detail").style.display = "block";
+    $("detail").scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
   const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
   if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
   $("draft").value = JSON.stringify(draft, null, 2);
@@ -244,9 +246,7 @@ async function openRun(runId) {
 $("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = new FormData();
-  data.append("file", $("file").files[0]);
-  data.append("insurer_slug", $("insurer").value);
-  data.append("doc_type", $("doc-type").value);
+  data.append("file", $("file").files[0]);  // insurer + type are detected by the AI
   const msg = $("upload-msg");
   const btn = $("upload-btn");
 
@@ -274,7 +274,13 @@ $("upload-form").addEventListener("submit", async (event) => {
         "it runs server-side even if you leave this page.";
     });
 
-    if (run.status === "failed") {
+    if (run.status === "rejected_invalid") {
+      msg.className = "msg err";
+      msg.textContent =
+        "Not a valid document — only insurance-related documents are accepted.\n" +
+        ((run.output && run.output.reason) || "The AI didn't recognize this as an insurance document.");
+      state.status = "rejected_invalid";
+    } else if (run.status === "failed") {
       msg.className = "msg err";
       msg.textContent =
         "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
@@ -287,13 +293,14 @@ $("upload-form").addEventListener("submit", async (event) => {
     }
     syncTabs();
     await loadQueue();
-    if (run.status !== "failed") await openRun(result.extraction_run_id);
+    if (run.status !== "failed" && run.status !== "rejected_invalid")
+      await openRun(result.extraction_run_id);
   } catch (error) {
     msg.className = "msg err";
     msg.textContent = error.message;
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Upload &amp; extract";
+    btn.innerHTML = "Upload";
   }
 });
 
@@ -338,7 +345,7 @@ $("reject").addEventListener("click", async () => {
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });
 
-loadInsurers().then(revealQueueIfAnyRuns).catch((error) => {
+revealQueueIfAnyRuns().catch((error) => {
   showQueue();
   $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
 });

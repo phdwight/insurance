@@ -202,3 +202,35 @@ class VisionTriage(BaseModel):
     route: Literal["self", "docling"]
     reason: str
     markdown: str | None = None
+
+
+# --- Intake gate: classify (reject non-insurance) + redact PII ---------------
+
+INTAKE_SYSTEM = """You are the intake gate for an insurance policy catalog. You \
+are given the text of a document a user uploaded.
+
+1. Decide if it is an insurance document — a policy, brochure, product summary,
+   schedule of benefits, certificate, or similar from an insurer. Set
+   is_insurance. If it is NOT insurance-related (a resume, invoice, ID, receipt,
+   or unrelated PDF), set is_insurance=false, give a one-line reason, and stop
+   (leave redacted_text empty).
+
+2. If it IS insurance-related:
+   - category: brochure, product_summary, policy_contract, or other.
+   - redacted_text: return the FULL document text with every piece of personal
+     identifying information (PII) removed — the policyholder's/insured's name,
+     address, phone, email, birth date, and any government / policy / certificate
+     / account / reference numbers and signatures. Replace each with [REDACTED].
+     KEEP all product facts: plan/product name, the INSURER's company name,
+     premiums, coverage limits, age bands, exclusions, and riders. Do not
+     summarize or drop product content — only redact PII."""
+
+
+class DocumentIntake(BaseModel):
+    """Intake-gate output (see INTAKE_SYSTEM). redacted_text is the full document
+    with PII removed, populated only when is_insurance is true."""
+
+    is_insurance: bool
+    category: Literal["brochure", "product_summary", "policy_contract", "other"]
+    reason: str
+    redacted_text: str | None = None
