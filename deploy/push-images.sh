@@ -2,20 +2,22 @@
 set -euo pipefail
 
 # Build every service image and push to a registry so another machine can
-# pull-and-run with deploy/docker-compose.yml (no source needed on the target).
+# pull-and-run with docker-compose.prod.yml (no source needed on the target).
 #
 # Usage (from anywhere):
 #   IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
 #
 # Optional:
-#   PLATFORMS=linux/amd64,linux/arm64   # default: linux/amd64 (typical cloud VM)
+#   PLATFORMS=linux/amd64   # override to build a single arch (faster)
+#     default: linux/amd64,linux/arm64 — covers x86 cloud VMs and ARM hosts
+#     (Apple Silicon, ARM NAS like Synology, Raspberry Pi, Ampere/Graviton).
 #
 # Prereq: log in to the registry first, e.g.
 #   echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
 
 IMAGE_PREFIX="${IMAGE_PREFIX:-ghcr.io/phdwight}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-PLATFORMS="${PLATFORMS:-linux/amd64}"
+PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 
 # repo root = parent of this script's directory
 cd "$(dirname "$0")/.."
@@ -38,15 +40,17 @@ for pair in $py_services; do
     --platform "$PLATFORMS" \
     -f Dockerfile.python \
     --build-arg SERVICE="$svc" \
-    "${extra[@]}" \
+    "${extra[@]+"${extra[@]}"}" \
     -t "$IMAGE_PREFIX/insurance-$name:$IMAGE_TAG" \
     --push .
 done
 
+# pwa ships the production image (static build served by nginx), NOT the dev
+# Dockerfile (Vite dev server).
 echo "==> building pwa for $PLATFORMS"
 docker buildx build \
   --platform "$PLATFORMS" \
-  -f pwa/Dockerfile \
+  -f pwa/Dockerfile.prod \
   -t "$IMAGE_PREFIX/insurance-pwa:$IMAGE_TAG" \
   --push ./pwa
 

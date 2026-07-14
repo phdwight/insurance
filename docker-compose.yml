@@ -37,7 +37,7 @@ services:
       dockerfile: Dockerfile.python
       args:
         SERVICE: api
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "log_config.yaml"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       AGENT_URL: http://agent:8001
@@ -55,7 +55,7 @@ services:
       dockerfile: Dockerfile.python
       args:
         SERVICE: agent
-    command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001", "--log-config", "log_config.yaml"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
@@ -80,7 +80,7 @@ services:
       dockerfile: Dockerfile.python
       args:
         SERVICE: mcp-server
-    command: ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    command: ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8002", "--log-config", "log_config.yaml"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       MCP_ALLOWED_HOSTS: mcp-server:8002,localhost:8002,127.0.0.1:8002
@@ -100,7 +100,7 @@ services:
       args:
         SERVICE: ingestion
         APT_PACKAGES: "libgl1 libglib2.0-0"
-    command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003", "--log-config", "log_config.yaml"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
@@ -115,6 +115,31 @@ services:
       - uploads:/data/uploads
     ports:
       - "8003:8003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: ingestion
+        APT_PACKAGES: "libgl1 libglib2.0-0"
+    # Durable queue worker: claims 'queued' extraction runs, parses + extracts,
+    # finalizes. No HTTP surface (no port / ADMIN_TOKEN).
+    command: ["python", "-m", "ingestion.worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
+      DOCS_DIR: /data/uploads
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    volumes:
+      - uploads:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully

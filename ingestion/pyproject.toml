@@ -9,9 +9,11 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pypdf>=6.0",
     "docling>=2.100",
-    # Direct dep so the CPU-only torch pin in the root pyproject takes effect
-    # (docling pulls torch transitively; the default Linux wheel drags in CUDA).
+    # Direct deps so the CPU-only pins in the root pyproject take effect (docling
+    # pulls both transitively; the default Linux wheels drag in CUDA, and a
+    # CUDA-built torchvision can't register its ops against +cpu torch).
     "torch>=2",
+    "torchvision>=0.28",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "langchain>=1.3",

@@ -30,7 +30,7 @@
         </mxCell>
 
         <!-- ===== main spine ===== -->
-        <mxCell id="start" value="Upload&#10;POST /documents (PDF · txt · md)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="start" value="Upload&#10;POST /documents → 202 queued&#10;(PDF · txt · md); a worker parses +&#10;extracts (DB-backed queue), UI polls" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="660" y="80" width="200" height="60" as="geometry" />
         </mxCell>
 
@@ -46,7 +46,7 @@
           <mxGeometry x="660" y="420" width="200" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="run" value="extraction run recorded&#10;pending_review · extraction_skipped&#10;· extraction_failed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="run" value="extraction run (queue)&#10;queued → processing → pending_review&#10;· extraction_skipped · extraction_failed&#10;· failed (parse failed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="660" y="550" width="200" height="70" as="geometry" />
         </mxCell>
 
@@ -67,7 +67,7 @@
         </mxCell>
 
         <!-- ===== left column ===== -->
-        <mxCell id="note-parse" value="fallback is NEVER silent: parser + reason returned (parser_note) and shown in the UI; DOCLING_ENABLED kill switch; scanned PDFs rejected honestly (OCR = future); docling needs libgl1/libglib2.0-0 (baked into the image)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="note-parse" value="fallback is NEVER silent: parser + reason recorded in parse_status and shown in the UI; DOCLING_ENABLED kill switch; OCR disabled (scanned PDFs rejected → failed run; OCR = future, async-safe); docling models + libgl1/libglib2.0-0 baked into the image" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="180" y="160" width="300" height="105" as="geometry" />
         </mxCell>
         <mxCell id="note-redo" value="re-uploading the same file is the REDO workflow: the stored file is reused, but a fresh extraction run is always created" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">

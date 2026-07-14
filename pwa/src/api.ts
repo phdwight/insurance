@@ -1,4 +1,32 @@
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+declare global {
+  interface Window {
+    // Injected at container start from $VITE_API_URL by pwa/docker-entrypoint.sh
+    // (see /config.js). Absent in local dev, where import.meta.env takes over.
+    __APP_CONFIG__?: { API_URL?: string };
+  }
+}
+
+const API =
+  window.__APP_CONFIG__?.API_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8000";
+
+// crypto.randomUUID() only exists in a secure context (HTTPS or localhost), so
+// it throws over plain HTTP to a LAN IP (e.g. a NAS at http://192.168.x.x). Fall
+// back to getRandomValues (available in insecure contexts), then to a non-crypto
+// id — a chat session id needs to be unique, not unguessable.
+export function newSessionId(): string {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  if (c?.getRandomValues) {
+    const b = c.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, "0"));
+    return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;
+  }
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 export interface ProductLine {
   code: string;

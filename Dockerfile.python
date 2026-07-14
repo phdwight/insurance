@@ -18,3 +18,11 @@ COPY . .
 RUN uv sync --frozen --no-dev --package insurance-${SERVICE}
 
 ENV PATH="/app/.venv/bin:$PATH"
+
+# ingestion only: bake docling's layout + table models into the image so the
+# first upload doesn't fetch them mid-request (which blows past reverse-proxy
+# timeouts) and so parsing works with no outbound internet. OCR models are
+# skipped — docling runs with OCR disabled (see ingestion/.../parsing.py).
+RUN if [ "$SERVICE" = "ingestion" ]; then \
+      python -c "from docling.utils.model_downloader import download_models; download_models(progress=False, with_rapidocr=False, with_code_formula=False, with_picture_classifier=False)"; \
+    fi

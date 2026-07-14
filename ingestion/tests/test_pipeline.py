@@ -2,12 +2,25 @@
 extract -> review -> publish, with persistence and LLM faked at module seams.
 The parser runs for real (plain text and a minimal in-memory PDF)."""
 
+import asyncio
+
 import ingestion.main as ingestion_main
 from fastapi.testclient import TestClient
 
-from ingestion import parsing, repository
+from ingestion import parsing, repository, worker
 
 client = TestClient(ingestion_main.app)
+
+
+def drain_worker() -> None:
+    """Run the queue worker until the queue is empty — the test stand-in for the
+    separate worker process (upload only enqueues now)."""
+
+    async def _drain() -> None:
+        while await worker.process_one():
+            pass
+
+    asyncio.run(_drain())
 
 BROCHURE = (
     "Demo Worldwide Voyager. Single-trip travel insurance. "
@@ -81,6 +94,10 @@ class FakeRepo:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.setattr(repository, "get_or_create_source_document", self.create_document)
         monkeypatch.setattr(repository, "create_extraction_run", self.create_run)
+        monkeypatch.setattr(repository, "finalize_extraction_run", self.finalize_run)
+        monkeypatch.setattr(repository, "update_parse_status", self.update_parse)
+        monkeypatch.setattr(repository, "claim_next_run", self.claim_next_run)
+        monkeypatch.setattr(repository, "reclaim_stale_runs", self.reclaim_stale_runs)
         monkeypatch.setattr(repository, "get_review", self.get_review)
         monkeypatch.setattr(repository, "list_reviews", self.list_reviews)
         monkeypatch.setattr(repository, "publish", self.publish)
@@ -125,6 +142,28 @@ class FakeRepo:
         }
         return run_id
 
+    def finalize_run(self, run_id, model, output, status):
+        run = self.runs[run_id]
+        run.update(model=model, output=output, status=status)
+
+    def update_parse(self, document_id, parse_status):
+        self.parse_statuses = getattr(self, "parse_statuses", {})
+        self.parse_statuses[document_id] = parse_status
+
+    def claim_next_run(self):
+        for run in self.runs.values():
+            if run["status"] == "queued":
+                run["status"] = "processing"
+                return {
+                    "id": run["id"],
+                    "source_document_id": run["source_document_id"],
+                    "file_ref": getattr(self, "file_refs", {}).get(run["source_document_id"]),
+                }
+        return None
+
+    def reclaim_stale_runs(self, older_than_seconds):
+        return 0
+
     def get_review(self, run_id):
         return self.runs.get(run_id)
 
@@ -156,15 +195,19 @@ def test_full_pipeline_upload_review_approve(monkeypatch, tmp_path) -> None:
     repo = FakeRepo()
     repo.install(monkeypatch, tmp_path)
 
-    # Upload (no LLM key -> extraction skipped, raw text kept for the reviewer)
+    # Upload only enqueues; the worker processes the queue.
     response = upload("voyager.txt", BROCHURE.encode())
-    assert response.status_code == 201
+    assert response.status_code == 202
     body = response.json()
-    assert body["status"] == "extraction_skipped"
-    assert body["parser"] == "text"
-    assert body["characters_parsed"] == len(BROCHURE)
+    assert body["status"] == "queued"  # terminal status is polled, not returned
     run_id = body["extraction_run_id"]
+    assert repo.runs[run_id]["status"] == "queued"  # nothing runs it yet
+
+    drain_worker()
+    # no LLM key -> extraction skipped, raw text kept for the reviewer
+    assert repo.runs[run_id]["status"] == "extraction_skipped"
     assert BROCHURE[:40] in repo.runs[run_id]["output"]["raw_text"]
+    assert "parsed:text" in repo.parse_statuses[body["document_id"]]
 
     # Review queue shows it under its status
     assert client.get("/reviews", params={"status": "extraction_skipped"}).json()[0][
@@ -197,12 +240,14 @@ def test_llm_extraction_feeds_pending_review(monkeypatch, tmp_path) -> None:
         assert "PHP 3,000,000" in text  # parsed text reaches the extractor
         return dict(VALID_DRAFT), "pending_review", "anthropic:claude-haiku-4-5"
 
-    monkeypatch.setattr(ingestion_main.extraction, "extract_draft", fake_extract)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
 
     response = upload("voyager.pdf", make_minimal_pdf(BROCHURE))
-    assert response.status_code == 201
-    assert response.json()["status"] == "pending_review"
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    drain_worker()
     run = repo.runs[response.json()["extraction_run_id"]]
+    assert run["status"] == "pending_review"  # finalized by the worker
     assert run["output"]["name"] == "Demo Worldwide Voyager"
 
 
@@ -213,8 +258,9 @@ def test_upload_guards(monkeypatch, tmp_path) -> None:
     assert upload("x.docx", b"whatever").status_code == 400  # unsupported type
     assert upload("x.txt", b"").status_code == 400  # empty file
     # no insurer given is fine (detected from document)...
-    assert upload("no-insurer.txt", b"some brochure text").status_code == 201
-    # ...but an explicitly given unknown insurer is still an error
+    assert upload("no-insurer.txt", b"some brochure text").status_code == 202
+    # ...but an explicitly given unknown insurer is still an error (validated
+    # synchronously, before the run is scheduled)
     assert upload("x.txt", b"text", insurer="ghost").status_code == 404
 
 
@@ -308,9 +354,32 @@ def test_docling_preferred_for_pdfs_when_available(monkeypatch) -> None:
     assert parser == "pypdf"
 
 
+def test_worker_claims_queue_and_records_parse_failure(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+
+    # a PDF with no extractable text (scanned) — parse fails, and the worker
+    # records it as a 'failed' run rather than losing it
+    response = upload("scanned.pdf", make_minimal_pdf(""))
+    assert response.status_code == 202
+    run_id = response.json()["extraction_run_id"]
+    assert repo.runs[run_id]["status"] == "queued"  # sits in the queue until a worker claims it
+
+    drain_worker()
+    run = repo.runs[run_id]
+    assert run["status"] == "failed"
+    assert "error" in run["output"]
+    # the empty queue is a no-op for the worker
+    assert asyncio.run(worker.process_one()) is False
+
+
 def test_parser_recorded_on_source_document(monkeypatch, tmp_path) -> None:
     repo = FakeRepo()
     repo.install(monkeypatch, tmp_path)  # forces DOCLING_ENABLED=false
     response = upload("voyager.pdf", make_minimal_pdf(BROCHURE))
-    assert response.json()["parser"] == "pypdf"
-    assert list(repo.parse_statuses.values()) == ["parsed:pypdf"]
+    assert response.status_code == 202
+    drain_worker()
+    # the parser is recorded on the source document's parse_status (surfaced to
+    # the reviewer) by the worker, not returned in the async upload response
+    [parse_status] = repo.parse_statuses.values()
+    assert parse_status.startswith("parsed:pypdf")

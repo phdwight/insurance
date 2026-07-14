@@ -1,0 +1,282 @@
+# Production compose — the single deploy file. Pulls pre-built images from the
+# registry by default; can also build from source with --build.
+#
+# Differences from docker-compose.yml (local dev):
+#   - Pulls ghcr.io/phdwight/insurance-* images (publish them once from the build
+#     machine with deploy/push-images.sh); no source needed on the target.
+#   - Host ports start at 41500: pwa 41500, api 41501, ingestion 41502.
+#   - Internal services (postgres, agent, mcp-server) are NOT published — they
+#     are reachable only on the compose network.
+#   - restart: unless-stopped, log rotation, and memory limits on every service.
+#   - No insecure defaults: POSTGRES_PASSWORD and ADMIN_TOKEN are REQUIRED
+#     (compose refuses to start without them).
+#   - Healthchecks gate app startup on a real /health probe.
+#
+# Usage (on the target host — only this file + .env needed):
+#   cp .env.example .env          # set POSTGRES_PASSWORD, ADMIN_TOKEN, LLM keys,
+#                                 # CORS_ORIGINS and VITE_API_URL to public URLs
+#   docker login ghcr.io          # if the images are private
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#
+# Override the registry/tag with IMAGE_PREFIX and IMAGE_TAG. To build locally
+# instead of pulling, add --build.
+#
+# The browser talks to the API directly, so VITE_API_URL and CORS_ORIGINS must
+# be the PUBLIC address of the api service (e.g. https://insurance.example.com,
+# or http://<host>:41501 if exposed directly). Front the published ports with a
+# TLS-terminating reverse proxy for any internet-facing deployment.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-env: &app-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-insurance}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-insurance}}
+
+x-embedding-env: &embedding-env
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-voyage-3.5}
+  EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insurance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in production}
+      POSTGRES_DB: ${POSTGRES_DB:-insurance}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insurance} -d ${POSTGRES_DB:-insurance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    # Internal only — no host port published.
+
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-migrate:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: db
+    # Runs Alembic once, then idles so the container stays "Running". A one-shot
+    # init container that exits 0 is correct, but some dashboards (e.g. UGREEN
+    # UGOS) flag the intentionally-stopped container as a project-level error.
+    # Idling keeps the UI green; dependents gate on service_healthy (below),
+    # which only passes AFTER migrations finish. If Alembic fails, the && chain
+    # aborts before the marker, health never turns green, and the restart policy
+    # retries — so failures still block startup and stay visible.
+    restart: unless-stopped
+    logging: *logging
+    command: ["sh", "-c", "alembic -c db/alembic.ini upgrade head && touch /tmp/migrated && tail -f /dev/null"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/migrated"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    environment:
+      <<: [*app-env, *embedding-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-api:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: api
+    restart: unless-stopped
+    logging: *logging
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "log_config.yaml"]
+    environment:
+      <<: *app-env
+      AGENT_URL: http://agent:8001
+      MCP_HTTP_URL: http://mcp-server:8002
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must list the public PWA origin(s)}
+    ports:
+      - "${API_PORT:-41501}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    depends_on:
+      migrate:
+        condition: service_healthy
+
+  agent:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-agent:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: agent
+    restart: unless-stopped
+    logging: *logging
+    command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001", "--log-config", "log_config.yaml"]
+    environment:
+      <<: *app-env
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      MCP_SERVER_URL: http://mcp-server:8002/mcp
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-insurance-recommender}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    depends_on:
+      migrate:
+        condition: service_healthy
+    # Internal only — reached by api over the compose network.
+
+  mcp-server:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-mcp-server:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: mcp-server
+    restart: unless-stopped
+    logging: *logging
+    command: ["uvicorn", "mcp_server.main:app", "--host", "0.0.0.0", "--port", "8002", "--log-config", "log_config.yaml"]
+    environment:
+      <<: [*app-env, *embedding-env]
+      MCP_ALLOWED_HOSTS: mcp-server:8002,localhost:8002,127.0.0.1:8002
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    depends_on:
+      migrate:
+        condition: service_healthy
+    # Internal only — reached by agent over the compose network.
+
+  ingestion:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-ingestion:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: ingestion
+        APT_PACKAGES: "libgl1 libglib2.0-0"
+    restart: unless-stopped
+    logging: *logging
+    command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003", "--log-config", "log_config.yaml"]
+    environment:
+      <<: [*app-env, *embedding-env]
+      DOCS_DIR: /data/uploads
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # REQUIRED — this port exposes the whole data/admin surface.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required before exposing ingestion}
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "${INGESTION_PORT:-41502}:8003"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m  # web only enqueues + writes files; docling lives in the worker
+    depends_on:
+      migrate:
+        condition: service_healthy
+
+  ingestion-worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-ingestion:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args:
+        SERVICE: ingestion
+        APT_PACKAGES: "libgl1 libglib2.0-0"
+    restart: unless-stopped
+    logging: *logging
+    # Durable queue worker: claims 'queued' extraction runs from Postgres, parses
+    # (docling) + extracts, and finalizes. No HTTP surface — no port, no
+    # ADMIN_TOKEN. Scale with `--scale ingestion-worker=N` (SKIP LOCKED is safe).
+    command: ["python", "-m", "ingestion.worker"]
+    environment:
+      <<: [*app-env, *embedding-env]
+      DOCS_DIR: /data/uploads
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - uploads:/data/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 2g  # docling layout/table models load here
+    depends_on:
+      migrate:
+        condition: service_healthy
+
+  pwa:
+    image: ${IMAGE_PREFIX:-ghcr.io/phdwight}/insurance-pwa:${IMAGE_TAG:-latest}
+    build:
+      context: ./pwa
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    logging: *logging
+    # Static nginx build. VITE_API_URL is rendered into /config.js at container
+    # start, so the browser must be able to reach this URL — set it to the API's
+    # PUBLIC address on the target host.
+    environment:
+      VITE_API_URL: ${VITE_API_URL:?VITE_API_URL must be the public API address}
+    ports:
+      - "${PWA_PORT:-41500}:80"
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only, but localhost
+      # resolves to ::1 (IPv6) first inside the container → false "unhealthy".
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:

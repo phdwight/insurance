@@ -65,9 +65,12 @@
     <p class="meta">New uploads open automatically in step 3 below — these tabs are for
        coming back to earlier runs.</p>
     <div class="row tabs" id="tabs">
+      <button data-status="queued">queued</button>
+      <button data-status="processing">processing</button>
       <button data-status="pending_review" class="active">pending review</button>
       <button data-status="extraction_skipped">extraction skipped</button>
       <button data-status="extraction_failed">extraction failed</button>
+      <button data-status="failed">failed</button>
       <button id="refresh" title="refresh">↻</button>
     </div>
     <div id="queue"></div>
@@ -93,6 +96,26 @@
 <script>
 const state = { status: "pending_review", runId: null };
 const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function syncTabs() {
+  document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.status === state.status));
+}
+
+// Upload is async: the server enqueues the run and returns immediately; a
+// separate worker parses + extracts (so slow/OCR parses never hit a proxy
+// timeout). Poll until the run leaves the queue ('queued' -> 'processing' -> done).
+const IN_FLIGHT = new Set(["queued", "processing"]);
+async function pollRun(runId, onTick) {
+  const start = Date.now();
+  for (;;) {
+    const run = await api(`/reviews/${runId}`);
+    if (!IN_FLIGHT.has(run.status)) return run;
+    if (onTick) onTick(Math.round((Date.now() - start) / 1000));
+    await sleep(2000);
+  }
+}
 
 function adminToken() {
   return sessionStorage.getItem("admin_token") ?? "";
@@ -147,12 +170,13 @@ function showQueue() {
 async function revealQueueIfAnyRuns() {
   // Progressive disclosure: a fresh page is just step 1; the queue appears
   // only when there is actually something to review (or after an upload).
-  for (const status of ["pending_review", "extraction_skipped", "extraction_failed"]) {
+  const statuses = ["queued", "processing", "pending_review", "extraction_skipped",
+                    "extraction_failed", "failed"];
+  for (const status of statuses) {
     const runs = await api(`/reviews?status=${status}`);
     if (runs.length) {
       state.status = status;
-      document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
-        b.classList.toggle("active", b.dataset.status === status));
+      syncTabs();
       showQueue();
       await loadQueue();
       return;
@@ -175,18 +199,33 @@ async function openRun(runId) {
   state.runId = runId;
   const run = await api(`/reviews/${runId}`);
   const output = run.output ?? {};
+  $("detail").style.display = "block";
+  const msg = $("detail-msg");
+
+  if (IN_FLIGHT.has(run.status)) {
+    $("detail-meta").textContent = `· run ${runId} · ${run.status}`;
+    $("draft").value = "";
+    msg.className = "msg";
+    msg.textContent = run.status === "queued"
+      ? "Queued — the worker will parse and extract this shortly. Refresh in a moment."
+      : "Parsing and extracting this upload — refresh the queue in a moment.";
+    $("detail").scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
   const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
   if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
   $("draft").value = JSON.stringify(draft, null, 2);
   $("detail-meta").textContent =
-    `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}`;
+    `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}` +
+    (run.parse_status ? ` · ${run.parse_status}` : "");
   $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
-  const msg = $("detail-msg");
-  if (output.error) {
+  if (run.status === "failed" || output.error) {
     msg.className = "msg err";
     msg.textContent =
-      `Extraction failed — draft below is an empty template.\n${output.error}\n` +
-      "Fix the cause (model name / API key) and re-upload the same file to retry.";
+      `${run.status === "failed" ? "Parsing/extraction" : "Extraction"} failed — ` +
+      `draft below is an empty template.\n${output.error ?? ""}\n` +
+      "Fix the cause (bad file / model name / API key) and re-upload the same file to retry.";
   } else if (run.status === "extraction_skipped") {
     msg.className = "msg warn";
     msg.textContent =
@@ -214,23 +253,41 @@ $("upload-form").addEventListener("submit", async (event) => {
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner"></span>Working…`;
   msg.className = "msg";
-  msg.textContent = "Uploading and parsing… PDFs go through docling's layout model " +
-    "(up to a minute or two on first use), then LLM extraction. Stay on this page.";
+  msg.textContent = "Uploading…";
 
   try {
     const result = await api("/documents", { method: "POST", body: data });
-    msg.className = "msg ok";
-    msg.textContent =
-      `Done — parsed with ${result.parser} (${result.characters_parsed} chars), ` +
-      `status: ${result.status}. Opening it for review below…` +
-      (result.document_reused ? "\nSame file as an earlier upload — re-extracted as a fresh run." : "") +
-      (result.parser_note ? `\n⚠ ${result.parser_note}` : "");
-    state.status = result.status;
-    document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
-      b.classList.toggle("active", b.dataset.status === state.status));
+    // Server enqueued the file; the worker parses + extracts in the background.
     showQueue();
+    state.status = "queued";
+    syncTabs();
     await loadQueue();
-    await openRun(result.extraction_run_id);  // next step is unmissable
+    msg.className = "msg";
+    msg.textContent =
+      "Queued — the worker is parsing and extracting. Large or scanned PDFs can " +
+      "take a while; it runs server-side even if you leave this page." +
+      (result.document_reused ? "\nSame file as an earlier upload — re-extracted as a fresh run." : "");
+
+    const run = await pollRun(result.extraction_run_id, (secs) => {
+      msg.textContent =
+        `Parsing and extracting… (${secs}s). Large or scanned PDFs take longer; ` +
+        "it runs server-side even if you leave this page.";
+    });
+
+    if (run.status === "failed") {
+      msg.className = "msg err";
+      msg.textContent =
+        "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
+        "\nFix the cause and re-upload the same file to retry.";
+      state.status = "failed";
+    } else {
+      msg.className = "msg ok";
+      msg.textContent = `Done — status: ${run.status}. Opening it for review below…`;
+      state.status = run.status;
+    }
+    syncTabs();
+    await loadQueue();
+    if (run.status !== "failed") await openRun(result.extraction_run_id);
   } catch (error) {
     msg.className = "msg err";
     msg.textContent = error.message;

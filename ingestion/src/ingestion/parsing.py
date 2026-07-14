@@ -29,10 +29,26 @@ def docling_enabled() -> bool:
 
 @lru_cache(maxsize=1)
 def _docling_converter():
-    """Singleton — docling loads its layout/table models once per process."""
-    from docling.document_converter import DocumentConverter
+    """Singleton — docling loads its layout/table models once per process.
 
-    return DocumentConverter()
+    OCR is disabled on purpose. Brochures are digital PDFs with real text, so
+    docling reads it directly; scanned PDFs are out of scope (extract_text tells
+    the user to upload a text-based PDF). Leaving OCR on makes docling download
+    RapidOCR models at first use and run slow per-page recognition on CPU, which
+    pushes uploads past reverse-proxy timeouts. Table structure stays on — that
+    layout-aware table markdown is the whole reason we use docling.
+    """
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.do_ocr = False
+    pipeline_options.do_table_structure = True
+
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+    )
 
 
 def _docling_convert(filename: str, data: bytes) -> tuple[str | None, str | None]:

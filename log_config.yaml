@@ -1,0 +1,51 @@
+# Uniform log format for every uvicorn-run service we control (api, agent,
+# mcp-server, ingestion). Wired in via `uvicorn --log-config log_config.yaml`.
+#
+# Without it, uvicorn's own logs, the access logs, and our app loggers
+# (agent / ingestion / mcp-server) all print with NO timestamp. This gives them
+# one line shape:
+#   2026-07-14 03:00:53 INFO:     ingestion docling conversion failed; ...
+#
+# Timestamps are UTC (the images run in UTC), so they line up with Postgres'
+# own log lines. Colours are off — output goes to container logs, not a TTY.
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  default:
+    "()": uvicorn.logging.DefaultFormatter
+    fmt: "%(asctime)s %(levelprefix)s %(name)s %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+    use_colors: false
+  access:
+    "()": uvicorn.logging.AccessFormatter
+    fmt: '%(asctime)s %(levelprefix)s %(name)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+    datefmt: "%Y-%m-%d %H:%M:%S"
+    use_colors: false
+
+handlers:
+  default:
+    formatter: default
+    class: logging.StreamHandler
+    stream: ext://sys.stderr
+  access:
+    formatter: access
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+
+loggers:
+  uvicorn:
+    level: INFO
+    handlers: [default]
+    propagate: false
+  uvicorn.error:
+    level: INFO
+  uvicorn.access:
+    level: INFO
+    handlers: [access]
+    propagate: false
+# Root catches our app loggers (agent / ingestion / mcp-server), which
+# propagate here — so they share the same timestamped format.
+root:
+  level: INFO
+  handlers: [default]

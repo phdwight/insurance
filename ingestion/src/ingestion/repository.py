@@ -121,6 +121,89 @@ def create_extraction_run(
         )
 
 
+def finalize_extraction_run(
+    run_id: str, model: str, output: dict | None, status: str
+) -> None:
+    """Move a run out of 'processing' to its terminal status once background
+    parse + extraction finish (or fail). Never loses a result — a failure is
+    recorded as status='failed' with the reason in output."""
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE catalog.extraction_runs
+                SET model = :model, output = :output, status = :status
+                WHERE id = :id
+                """
+            ),
+            {
+                "id": run_id,
+                "model": model,
+                "output": json.dumps(output) if output is not None else None,
+                "status": status,
+            },
+        )
+
+
+def update_parse_status(document_id: str, parse_status: str) -> None:
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE catalog.source_documents SET parse_status = :status WHERE id = :id"
+            ),
+            {"status": parse_status, "id": document_id},
+        )
+
+
+def claim_next_run() -> dict[str, Any] | None:
+    """Atomically claim one 'queued' run for a worker: flip it to 'processing'
+    and stamp claimed_at. FOR UPDATE SKIP LOCKED means concurrent workers never
+    grab the same row. Returns {id, source_document_id, file_ref} or None when
+    the queue is empty."""
+    with get_engine().begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                UPDATE catalog.extraction_runs
+                SET status = 'processing', claimed_at = now()
+                WHERE id = (
+                    SELECT id FROM catalog.extraction_runs
+                    WHERE status = 'queued'
+                    ORDER BY created_at
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING id, source_document_id
+                """
+            )
+        ).first()
+        if row is None:
+            return None
+        run = dict(row._mapping)
+        run["file_ref"] = conn.execute(
+            text("SELECT file_ref FROM catalog.source_documents WHERE id = :id"),
+            {"id": run["source_document_id"]},
+        ).scalar()
+        return run
+
+
+def reclaim_stale_runs(older_than_seconds: int) -> int:
+    """Requeue runs a crashed worker left stuck in 'processing' past the stale
+    window, so an upload is never stranded. Returns how many were requeued."""
+    with get_engine().begin() as conn:
+        return conn.execute(
+            text(
+                """
+                UPDATE catalog.extraction_runs
+                SET status = 'queued', claimed_at = NULL
+                WHERE status = 'processing'
+                  AND claimed_at < now() - make_interval(secs => :secs)
+                """
+            ),
+            {"secs": older_than_seconds},
+        ).rowcount
+
+
 def list_insurers() -> list[dict[str, Any]]:
     with get_engine().connect() as conn:
         rows = conn.execute(
@@ -147,7 +230,8 @@ def list_reviews(status: str = "pending_review") -> list[dict[str, Any]]:
     sql = text(
         """
         SELECT r.id, r.status, r.model, r.created_at, r.output,
-               d.doc_type, d.file_ref, i.name AS insurer_name, i.slug AS insurer_slug
+               d.doc_type, d.file_ref, d.parse_status,
+               i.name AS insurer_name, i.slug AS insurer_slug
         FROM catalog.extraction_runs r
         JOIN catalog.source_documents d ON d.id = r.source_document_id
         LEFT JOIN catalog.insurers i ON i.id = d.insurer_id
@@ -163,7 +247,8 @@ def get_review(run_id: str) -> dict[str, Any] | None:
     sql = text(
         """
         SELECT r.id, r.status, r.model, r.output, r.source_document_id,
-               d.insurer_id, d.file_ref, i.slug AS insurer_slug, i.name AS insurer_name
+               d.insurer_id, d.file_ref, d.parse_status,
+               i.slug AS insurer_slug, i.name AS insurer_name
         FROM catalog.extraction_runs r
         JOIN catalog.source_documents d ON d.id = r.source_document_id
         LEFT JOIN catalog.insurers i ON i.id = d.insurer_id

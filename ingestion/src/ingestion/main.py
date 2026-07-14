@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
-from ingestion import extraction, parsing, repository
+from ingestion import parsing, repository
 from ingestion.prompts import PolicyDraft
 
 
@@ -47,7 +47,7 @@ def docs_dir() -> Path:
     return path
 
 
-@app.post("/documents", status_code=201)
+@app.post("/documents", status_code=202)
 async def upload_document(
     _auth: Protected,
     file: UploadFile,
@@ -55,14 +55,21 @@ async def upload_document(
     doc_type: str = Form(default="brochure"),
     uploaded_by: str = Form(default="admin"),
 ) -> dict:
+    """Store the file and enqueue a run, then return immediately. The ingestion
+    worker (a separate process) parses + extracts off the request path, so slow
+    parsing (and any future OCR) never trips a reverse-proxy timeout. The
+    reviewer UI polls GET /reviews/{id} until the run leaves the queue."""
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty file")
 
-    try:
-        document_text, parser, parser_note = parsing.extract_text(file.filename or "", data)
-    except parsing.UnsupportedDocument as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in parsing.SUPPORTED_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported file type '{suffix}' — use one of "
+            f"{sorted(parsing.SUPPORTED_SUFFIXES)}",
+        )
 
     file_hash = hashlib.sha256(data).hexdigest()
     file_ref = str(docs_dir() / f"{file_hash[:16]}-{Path(file.filename or 'doc').name}")
@@ -71,24 +78,21 @@ async def upload_document(
     try:
         document_id, created = repository.get_or_create_source_document(
             insurer_slug or None, file_hash, file_ref, doc_type, uploaded_by,
-            parse_status=f"parsed:{parser}",
+            parse_status="queued",
         )
     except repository.InsurerNotFound as error:
         raise HTTPException(
             status_code=404, detail=f"unknown insurer slug '{error}'"
         ) from error
 
-    output, status, model = await extraction.extract_draft(document_text)
-    run_id = repository.create_extraction_run(document_id, model, output, status)
+    # Enqueue: the worker claims 'queued' runs, parses, extracts, and finalizes.
+    run_id = repository.create_extraction_run(document_id, "pending", None, "queued")
 
     return {
         "document_id": document_id,
         "document_reused": not created,  # same file seen before -> fresh run anyway
         "extraction_run_id": run_id,
-        "status": status,
-        "parser": parser,
-        "parser_note": parser_note,  # why a docling fallback happened, if it did
-        "characters_parsed": len(document_text),
+        "status": "queued",  # poll GET /reviews/{id} until it leaves the queue
     }
 
 

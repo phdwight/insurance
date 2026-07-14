@@ -25,6 +25,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // config.js is rendered per-host at container start — never precache it,
+        // or the SW would pin the app to a stale API URL.
+        globIgnores: ["config.js", "**/config.js"],
       },
     }),
   ],

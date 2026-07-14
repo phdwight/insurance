@@ -42,6 +42,10 @@ insurance-mcp-server = { workspace = true }
 insurance-ingestion = { workspace = true }
 insurance-db = { workspace = true }
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+# torchvision must come from the SAME CPU index as torch — the default PyPI
+# wheel is built against the CUDA torch ABI, so paired with +cpu torch its
+# C++ ops (torchvision::nms) fail to register and docling import blows up.
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.ruff]
 line-length = 100

@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
-import { streamChat, type Question, type Recommendations } from "./api";
+import { newSessionId, streamChat, type Question, type Recommendations } from "./api";
 import Chat, { type ChatMessage } from "./components/Chat";
 import Intake from "./components/Intake";
 import Results from "./components/Results";
 import "./app.css";
 
 export default function App() {
-  const sessionId = useRef(crypto.randomUUID());
+  const sessionId = useRef(newSessionId());
   const modeRef = useRef<"freeform" | "guided">("freeform");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState<Question | null>(null);
