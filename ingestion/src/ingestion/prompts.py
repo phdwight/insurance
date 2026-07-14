@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import get_args
+from typing import Literal, get_args
 
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from shared import (
     HealthCoverage,
@@ -175,3 +175,30 @@ def policy_draft_schema() -> dict:
             name for name in schema["required"] if name not in SERVER_MANAGED_FIELDS
         ]
     return schema
+
+
+# --- Vision triage (large model looks at the PDF pages and routes) -----------
+
+VISION_TRIAGE_SYSTEM = """You are triaging an insurance policy PDF for an \
+extraction pipeline. You are shown images of its pages.
+
+Decide how the document should be turned into text:
+- route "docling": the pages are mostly selectable text and tables that a
+  layout-aware PDF parser reads accurately. Prefer this for normal digital
+  brochures — it is cheaper and more precise. Leave markdown empty.
+- route "self": the pages are image-heavy, scanned, or have complex visual
+  layout/tables a text parser would mangle or miss. Then YOU transcribe the
+  document to clean, faithful Markdown: preserve tables as Markdown tables, and
+  keep headings, premiums, coverage limits, age bands, and exclusions exactly as
+  shown. Do NOT summarize, infer, or omit content.
+
+Return the route, a one-line reason, and — only for "self" — the full Markdown."""
+
+
+class VisionTriage(BaseModel):
+    """Router output for VISION_TRIAGE_SYSTEM: how to turn the PDF into text.
+    ``markdown`` is the full transcription, populated only when route == 'self'."""
+
+    route: Literal["self", "docling"]
+    reason: str
+    markdown: str | None = None

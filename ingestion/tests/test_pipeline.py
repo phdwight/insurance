@@ -373,6 +373,52 @@ def test_worker_claims_queue_and_records_parse_failure(monkeypatch, tmp_path) ->
     assert asyncio.run(worker.process_one()) is False
 
 
+def test_vision_self_transcribes_image_heavy_pdf(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")  # enables vision triage
+
+    async def fake_triage(filename, data):
+        # large model decides it can read the image-heavy doc and transcribes it
+        return "# Voyager\n| Plan | Premium |\n|---|---|\n| A | PHP 900 |", "self", "scanned"
+
+    async def fake_extract(text):
+        assert "| Plan | Premium |" in text  # vision Markdown reached the extractor
+        return dict(VALID_DRAFT), "pending_review", "anthropic:claude-sonnet-4-5"
+
+    monkeypatch.setattr(worker.vision, "triage", fake_triage)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("scanned.pdf", make_minimal_pdf("ignored"))
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "pending_review"
+    assert run["output"]["name"] == "Demo Worldwide Voyager"
+    assert "parsed:llm-vision" in list(repo.parse_statuses.values())[-1]
+
+
+def test_vision_routes_clean_pdf_to_docling(monkeypatch, tmp_path) -> None:
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)  # DOCLING_ENABLED=false -> pypdf path
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    async def fake_triage(filename, data):
+        return None, "docling", "clean digital text"  # hands off to the parser
+
+    async def fake_extract(text):
+        assert "PHP 500" in text  # parser text, not vision
+        return dict(VALID_DRAFT), "pending_review", "model"
+
+    monkeypatch.setattr(worker.vision, "triage", fake_triage)
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("brochure.pdf", make_minimal_pdf("Premium PHP 500"))
+    drain_worker()
+    parse_status = list(repo.parse_statuses.values())[-1]
+    assert "parsed:pypdf" in parse_status
+    assert "vision → docling" in parse_status
+
+
 def test_parser_recorded_on_source_document(monkeypatch, tmp_path) -> None:
     repo = FakeRepo()
     repo.install(monkeypatch, tmp_path)  # forces DOCLING_ENABLED=false

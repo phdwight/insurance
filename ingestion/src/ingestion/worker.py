@@ -17,9 +17,25 @@ from pathlib import Path
 
 import anyio
 
-from ingestion import extraction, parsing, repository
+from ingestion import extraction, parsing, repository, vision
 
 logger = logging.getLogger("ingestion")
+
+
+async def _to_text(filename: str, data: bytes) -> tuple[str, str, str | None]:
+    """Turn an uploaded document into text. For PDFs the large vision model
+    triages first — it transcribes image-heavy/scanned docs to Markdown itself,
+    or routes to docling (clean digital text/tables). Other types, and the
+    docling route, go through the parser (blocking, so off the event loop)."""
+    if filename.lower().endswith(".pdf") and vision.vision_enabled():
+        markdown, route, reason = await vision.triage(filename, data)
+        if route == "self" and markdown:
+            return markdown, "llm-vision", f"vision self-transcribed: {reason}"
+        text, parser, dnote = await anyio.to_thread.run_sync(
+            parsing.extract_text, filename, data
+        )
+        return text, parser, " · ".join(x for x in (f"vision → docling: {reason}", dnote) if x)
+    return await anyio.to_thread.run_sync(parsing.extract_text, filename, data)
 
 
 def poll_interval_seconds() -> float:
@@ -39,10 +55,7 @@ async def _process(run_id: str, document_id: str, file_ref: str | None) -> None:
         if not file_ref or not Path(file_ref).exists():
             raise FileNotFoundError(f"stored file missing: {file_ref}")
         data = await anyio.to_thread.run_sync(Path(file_ref).read_bytes)
-        # docling/pypdf are blocking and CPU-bound — keep them off the loop.
-        document_text, parser, parser_note = await anyio.to_thread.run_sync(
-            parsing.extract_text, Path(file_ref).name, data
-        )
+        document_text, parser, parser_note = await _to_text(Path(file_ref).name, data)
     except parsing.UnsupportedDocument as error:
         repository.update_parse_status(document_id, "parse_failed")
         repository.finalize_extraction_run(run_id, "none", {"error": str(error)}, "failed")

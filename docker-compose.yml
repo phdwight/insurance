@@ -133,7 +133,9 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       DOCS_DIR: /data/uploads
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      VISION_TRIAGE: ${VISION_TRIAGE:-auto}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
