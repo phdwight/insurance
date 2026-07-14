@@ -31,9 +31,21 @@ async def _to_text(filename: str, data: bytes) -> tuple[str, str, str | None]:
         markdown, route, reason = await vision.triage(filename, data)
         if route == "self" and markdown:
             return markdown, "llm-vision", f"vision self-transcribed: {reason}"
-        text, parser, dnote = await anyio.to_thread.run_sync(
-            parsing.extract_text, filename, data
-        )
+        # docling route — but recover via vision if the PDF has no real text layer
+        # (image-heavy/designed brochures: docling yields only image placeholders).
+        try:
+            text, parser, dnote = await anyio.to_thread.run_sync(
+                parsing.extract_text, filename, data
+            )
+        except parsing.UnsupportedDocument:
+            text, parser, dnote = "", "docling", "no extractable text"
+        if vision.is_thin(text):
+            transcribed = await vision.transcribe(filename, data)
+            if transcribed and not vision.is_thin(transcribed):
+                return transcribed, "llm-vision", "thin text layer → vision transcribed"
+            raise parsing.UnsupportedDocument(
+                "image-only PDF: no extractable text and vision transcription unavailable"
+            )
         return text, parser, " · ".join(x for x in (f"vision → docling: {reason}", dnote) if x)
     return await anyio.to_thread.run_sync(parsing.extract_text, filename, data)
 

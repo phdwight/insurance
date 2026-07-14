@@ -13,12 +13,17 @@ import base64
 import io
 import logging
 import os
+import re
 
 import anyio
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
-from ingestion.prompts import VISION_TRIAGE_SYSTEM, VisionTriage
+from ingestion.prompts import (
+    VISION_TRANSCRIBE_SYSTEM,
+    VISION_TRIAGE_SYSTEM,
+    VisionTriage,
+)
 
 logger = logging.getLogger("ingestion")
 
@@ -73,6 +78,33 @@ def _image_block(png: bytes, provider: str) -> dict:
         "type": "image",
         "source": {"type": "base64", "media_type": "image/png", "data": b64},
     }
+
+
+def is_thin(text: str) -> bool:
+    """A text parser on an image-only PDF returns mostly '<!-- image -->'
+    placeholders and almost no real text — too thin to classify or extract, so
+    the caller should fall back to vision transcription."""
+    real = re.sub(r"<!--.*?-->", "", text or "", flags=re.DOTALL)
+    return len(real.strip()) < 120
+
+
+async def transcribe(filename: str, data: bytes) -> str | None:
+    """Force full transcription of the PDF pages to Markdown — the recovery path
+    when a text parser produced nothing usable (image-heavy PDF, no text layer).
+    Returns None on failure."""
+    try:
+        pages = await anyio.to_thread.run_sync(_render_pages, data)
+        if not pages:
+            return None
+        provider = _model_name().split(":", 1)[0]
+        content: list[dict] = [{"type": "text", "text": VISION_TRANSCRIBE_SYSTEM}]
+        content += [_image_block(png, provider) for png in pages]
+        result = await init_chat_model(_model_name()).ainvoke([HumanMessage(content=content)])
+        text = result.content if isinstance(result.content, str) else None
+        return text if text and text.strip() else None
+    except Exception:
+        logger.warning("vision transcription failed", exc_info=True)
+        return None
 
 
 async def triage(filename: str, data: bytes) -> tuple[str | None, str, str]:

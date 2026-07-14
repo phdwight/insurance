@@ -234,3 +234,11 @@ class DocumentIntake(BaseModel):
     category: Literal["brochure", "product_summary", "policy_contract", "other"]
     reason: str
     redacted_text: str | None = None
+
+
+# --- Vision transcription (recovery when a text parser yields nothing) --------
+
+VISION_TRANSCRIBE_SYSTEM = """Transcribe this document's pages to clean, faithful \
+Markdown. Preserve tables as Markdown tables and keep every heading, product
+name, premium, coverage limit, benefit, age band, and exclusion exactly as
+shown. Do not summarize, infer, or omit content."""

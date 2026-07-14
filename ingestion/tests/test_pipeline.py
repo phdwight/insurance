@@ -423,11 +423,51 @@ def test_vision_routes_clean_pdf_to_docling(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(worker.vision, "triage", fake_triage)
     monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
 
-    upload("brochure.pdf", make_minimal_pdf("Premium PHP 500"))
+    brochure = ("BYAHERO Worldwide Voyager travel insurance. Emergency medical up to "
+                "PHP 3,000,000 including COVID-19. Trip cancellation PHP 100,000. "
+                "Premium from PHP 500. Ages 0-70. Trips up to 45 days.")
+    upload("brochure.pdf", make_minimal_pdf(brochure))
     drain_worker()
     parse_status = list(repo.parse_statuses.values())[-1]
-    assert "parsed:pypdf" in parse_status
+    assert "parsed:pypdf" in parse_status  # real text layer -> no vision recovery
     assert "vision → docling" in parse_status
+
+
+def test_vision_recovers_thin_docling_text(monkeypatch, tmp_path) -> None:
+    # An image-heavy PDF where docling yields only placeholders: vision must
+    # transcribe it rather than the doc being wrongly rejected as empty.
+    repo = FakeRepo()
+    repo.install(monkeypatch, tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("VISION_TRIAGE", "auto")
+
+    async def triage(filename, data):
+        return None, "docling", "looks like a clean brochure"  # wrong guess
+
+    async def transcribe(filename, data):
+        return ("# Sun Acceler8\n20-year endowment insurance from Sun Life. Increasing "
+                "life coverage up to 228% of the face amount. Guaranteed maturity "
+                "benefit of 102%. Special bonus after 8 years. Limited pay period.")
+
+    monkeypatch.setattr(worker.vision, "triage", triage)
+    monkeypatch.setattr(worker.vision, "transcribe", transcribe)
+    # docling returns image placeholders only (thin)
+    monkeypatch.setattr(
+        worker.parsing, "extract_text",
+        lambda f, d: ("<!-- image -->\n<!-- image -->\n<!-- image -->", "docling", None),
+    )
+
+    async def fake_extract(text):
+        assert "Sun Acceler8" in text  # vision-transcribed text reached the extractor
+        return dict(VALID_DRAFT), "pending_review", "model"
+
+    monkeypatch.setattr(worker.extraction, "extract_draft", fake_extract)
+
+    upload("sun.pdf", make_minimal_pdf("ignored"))
+    drain_worker()
+    run = list(repo.runs.values())[-1]
+    assert run["status"] == "pending_review"
+    assert "parsed:llm-vision" in list(repo.parse_statuses.values())[-1]
 
 
 def test_intake_rejects_non_insurance_document(monkeypatch, tmp_path) -> None:
