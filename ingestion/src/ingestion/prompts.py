@@ -29,6 +29,10 @@ Rules:
 - Tables usually hold premiums, limits, and age bands — read them carefully.
 - summary: 2-4 factual sentences a comparison shopper would need.
 - exclusions/riders: short verbatim-faithful phrases from the document.
+- Structure matters: summary, premiums, currency, riders, exclusions, extras,
+  eligibility, and dates are TOP-LEVEL fields. The `coverage` object holds ONLY
+  line-specific fields (for life: policy_type, face amounts, maturity benefit,
+  term years) — never put summary or premiums inside coverage.
 - The draft will be reviewed and corrected by a human before publication;
   when unsure, prefer null over a plausible-looking value."""
 
@@ -46,6 +50,11 @@ def _amount_field_names() -> frozenset[str]:
 
 
 AMOUNT_FIELDS = _amount_field_names()
+
+
+def _is_blank(value: object) -> bool:
+    """Missing or empty — a value we can safely overwrite with a hoisted one."""
+    return value is None or value == "" or value == [] or value == {}
 _AMOUNT_MULTIPLIERS = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
 _AMOUNT_PATTERN = re.compile(r"([\d.]+)([kmb])?", re.IGNORECASE)
 _CURRENCY_NOISE = re.compile(r"(?i)php|usd|eur|gbp|[₱$€£,_\s]")
@@ -99,14 +108,22 @@ class PolicyDraft(PolicyVersion):
         if not isinstance(data, dict):
             return data
         data = dict(data)
-        for name in AMOUNT_FIELDS & data.keys():
-            data[name] = normalize_amount(data[name])
         coverage = data.get("coverage")
         if isinstance(coverage, dict):
             coverage = dict(coverage)
+            # Small extractors sometimes file top-level policy facts (summary,
+            # riders, premiums…) under coverage; the coverage models don't define
+            # them, so Pydantic would drop them and a required top-level field
+            # (e.g. summary) would silently go missing. Lift each back out when
+            # the top level doesn't already carry a real value.
+            for name in HOISTABLE_FIELDS & coverage.keys():
+                if _is_blank(data.get(name)):
+                    data[name] = coverage.pop(name)
             for name in AMOUNT_FIELDS & coverage.keys():
                 coverage[name] = normalize_amount(coverage[name])
             data["coverage"] = coverage
+        for name in AMOUNT_FIELDS & data.keys():
+            data[name] = normalize_amount(data[name])
         return data
 
     @field_validator("effective_date", mode="before")
@@ -157,6 +174,22 @@ def _oneof_to_anyof(node: object) -> None:
 # Identity/versioning/verification fields the database owns — the extractor must
 # never see them, or it fills UUID slots with brochure reference numbers.
 SERVER_MANAGED_FIELDS = ("id", "policy_id", "version", "verified_at")
+
+
+def _hoistable_field_names() -> frozenset[str]:
+    """Top-level ``PolicyVersion`` fields that are never a key of any coverage
+    variant. Small extractors sometimes file these (summary, riders, premiums…)
+    inside ``coverage``; the coverage models don't define them, so Pydantic would
+    drop them and a required top-level field (e.g. summary) would silently go
+    missing. Derived from the schema, so a new top-level field is covered too."""
+    coverage_fields: set[str] = set()
+    for model in (LifeCoverage, HealthCoverage, TravelCoverage, PetCoverage):
+        coverage_fields |= set(model.model_fields)
+    top = set(PolicyVersion.model_fields) - {"coverage"}
+    return frozenset(top - coverage_fields - set(SERVER_MANAGED_FIELDS))
+
+
+HOISTABLE_FIELDS = _hoistable_field_names()
 
 
 def policy_draft_schema() -> dict:

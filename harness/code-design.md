@@ -46,6 +46,13 @@ functions stay flat and tests patch the module seams.
   text" can't tell the PDF has no extractable text *layer*. Check the actual
   result (was the extracted text empty/placeholder?) and recover, rather than
   trusting the router and shipping garbage downstream.
+- **Recover misplaced LLM output, don't just reject it.** A structured-output
+  model will sometimes put a *correct* value in the *wrong* slot — e.g. nesting a
+  top-level field inside a sub-object. If the schema drops it (extra keys are
+  silently ignored), a required field goes missing and validation fails on data
+  that was actually present. Add a deterministic pre-validation step that moves
+  such fields back where they belong (derive the field lists from the schema so
+  it self-maintains), rather than 422-ing the reviewer over a misfile.
 - **Match the surrounding code** — naming, comment density, and idiom should
   read as if one person wrote the file.
 - **Small, honest units** — a function does one thing; a comment explains *why*,
