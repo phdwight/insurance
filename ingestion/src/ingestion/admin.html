@@ -40,6 +40,17 @@
   <p class="meta">Upload a brochure, review the extracted draft, approve to publish.
      Nothing goes live without approval.</p>
 
+  <section id="token-bar" style="display:none">
+    <h2>Admin token</h2>
+    <p class="meta">This service requires the <code>ADMIN_TOKEN</code> — paste it once per browser session.</p>
+    <div class="row">
+      <input id="token-input" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"
+             style="max-width:420px" />
+      <button class="primary" id="token-save">Save</button>
+    </div>
+    <div class="msg" id="token-msg"></div>
+  </section>
+
   <section>
     <h2>1 · Upload a document</h2>
     <p class="meta">Just drop an insurance document — the AI detects the insurer and
@@ -117,10 +128,14 @@ function adminToken() {
   return sessionStorage.getItem("admin_token") ?? "";
 }
 
-function askForToken() {
-  const token = prompt("This service requires the admin token (ADMIN_TOKEN):");
-  if (token) sessionStorage.setItem("admin_token", token.trim());
-  return Boolean(token);
+function showTokenBar(message) {
+  // Inline token entry — window.prompt() is blocked in some browsers/webviews.
+  $("token-bar").style.display = "block";
+  if (message) {
+    $("token-msg").className = "msg warn";
+    $("token-msg").textContent = message;
+  }
+  $("token-input").focus();
 }
 
 function withToken(url) {
@@ -142,10 +157,10 @@ const DRAFT_TEMPLATE = {
 async function api(path, options = {}) {
   options.headers = { ...(options.headers ?? {}) };
   if (adminToken()) options.headers["authorization"] = `Bearer ${adminToken()}`;
-  let response = await fetch(path, options);
-  if (response.status === 401 && askForToken()) {
-    options.headers["authorization"] = `Bearer ${adminToken()}`;
-    response = await fetch(path, options);
+  const response = await fetch(path, options);
+  if (response.status === 401) {
+    showTokenBar("Enter your admin token above and Save, then try again.");
+    throw new Error("Admin token required.");
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(JSON.stringify(body.detail ?? body, null, 2));
@@ -345,10 +360,24 @@ $("reject").addEventListener("click", async () => {
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });
 
-revealQueueIfAnyRuns().catch((error) => {
-  showQueue();
-  $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
-});
+function saveToken() {
+  const value = $("token-input").value.trim();
+  if (!value) return;
+  sessionStorage.setItem("admin_token", value);
+  $("token-input").value = "";
+  $("token-bar").style.display = "none";
+  init();  // retry now that we have a token
+}
+$("token-save").addEventListener("click", saveToken);
+$("token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveToken(); });
+
+function init() {
+  revealQueueIfAnyRuns().catch((error) => {
+    showQueue();
+    $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
+  });
+}
+init();
 </script>
 </body>
 </html>
