@@ -82,12 +82,19 @@ With `VOYAGE_API_KEY` set in `.env` (and re-seeding), `search_policies` ranks se
 
 `docker-compose.prod.yml` is the single production compose. It pulls pre-built images from GHCR (or `--build`s locally), publishes host ports **from 41500** (pwa 41500, api 41501, ingestion 41502; postgres, agent, and mcp-server stay internal), and adds restart policies, log rotation, memory limits, `/health` healthchecks, and required-secret guards.
 
+**Images are published automatically:** merging image-affecting code to `main`
+triggers the [`Publish images`](.github/workflows/publish-images.yml) workflow,
+which builds all services multi-arch (amd64 + arm64, native runners) and pushes
+them to GHCR tagged `:latest` and `:sha-<short>`. `deploy/push-images.sh` is the
+manual fallback for building/publishing locally.
+
 ```bash
-# On the BUILD machine — publish images once (multi-arch amd64+arm64):
+# (Manual/local alternative to CI — multi-arch amd64+arm64:)
 IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
 
 # On the TARGET host — only this file + .env are needed:
 cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL
+docker compose -f docker-compose.prod.yml --env-file .env pull   # get the latest images
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 

@@ -4,6 +4,10 @@ set -euo pipefail
 # Build every service image and push to a registry so another machine can
 # pull-and-run with docker-compose.prod.yml (no source needed on the target).
 #
+# CI publishes these automatically on merge to main
+# (.github/workflows/publish-images.yml); this script is the manual/local
+# alternative (e.g. to publish from a feature branch or without Actions).
+#
 # Usage (from anywhere):
 #   IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
 #

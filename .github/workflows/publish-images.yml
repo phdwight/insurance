@@ -1,0 +1,136 @@
+name: Publish images
+
+# Build and push every service image to GHCR when image-affecting code lands on
+# main (a merged PR, or a direct push). Replaces running deploy/push-images.sh
+# by hand. Also runnable on demand from the Actions tab (workflow_dispatch).
+#
+# Multi-arch (amd64 + arm64) on NATIVE runners — no QEMU — so the heavy
+# torch/docling ingestion image builds reliably on arm64 (the NAS target). Each
+# arch is pushed by digest; a per-image manifest list is then assembled and
+# tagged :latest and :sha-<short>. Mirrors what push-images.sh does locally.
+#
+# First-run note: GITHUB_TOKEN can push these packages only if each existing
+# ghcr.io/<owner>/insurance-* package grants THIS repo write access. If the first
+# run fails with "denied", open the package on GitHub → Package settings →
+# "Manage Actions access" → add the `insurance` repo with the Write role (or
+# delete the old package so the workflow recreates it already linked to the repo).
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when something that actually goes into an image changes —
+    # docs / diagrams / harness / compose don't (see harness/deploy-gotchas.md).
+    paths:
+      - "api/**"
+      - "agent/**"
+      - "mcp-server/**"
+      - "ingestion/**"
+      - "db/**"
+      - "shared/**"
+      - "pwa/**"
+      - "Dockerfile.python"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "log_config.yaml"
+      - ".github/workflows/publish-images.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-images
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - { name: migrate, service: db }
+          - { name: api, service: api }
+          - { name: agent, service: agent }
+          - { name: mcp-server, service: mcp-server }
+          - { name: ingestion, service: ingestion, apt: "libgl1 libglib2.0-0" }
+          - { name: pwa, dockerfile: pwa/Dockerfile.prod, context: pwa }
+        platform:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context || '.' }}
+          file: ${{ matrix.image.dockerfile || 'Dockerfile.python' }}
+          platforms: linux/${{ matrix.platform.arch }}
+          build-args: |
+            SERVICE=${{ matrix.image.service }}
+            APT_PACKAGES=${{ matrix.image.apt }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: merge & tag ${{ matrix.image }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [migrate, api, agent, mcp-server, ingestion, pwa]
+    steps:
+      - name: Download this image's per-arch digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+      - name: Create and push manifest list
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image }}@sha256:%s ' *)
+      - name: Inspect
+        run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image }}:latest

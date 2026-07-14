@@ -47,6 +47,23 @@ not exist` at import. Fix: pin *every* paired package to the same index/build
 at first use so the first real request doesn't fetch mid-flight (and it works
 offline).
 
+## CI image publishing (multi-arch, GHCR)
+
+- **Build arm64 on native runners, not QEMU.** Emulating an arm64 build of a
+  heavy image (torch/docling, large native deps) under QEMU is slow and flaky —
+  it can take an hour or OOM. If your registry needs arm64 (e.g. an ARM NAS
+  target), build each arch on its own native runner (public GitHub repos get
+  free `ubuntu-*-arm` runners), push per-arch by digest, then merge into one
+  manifest list. Reliable and fast; no emulation.
+- **GITHUB_TOKEN can't always push to a pre-existing package.** A package first
+  pushed by a user PAT won't accept the workflow's `GITHUB_TOKEN` until the
+  package grants the repo write access (package → Manage Actions access → add the
+  repo, Write). New packages the workflow creates are linked automatically.
+- **Only rebuild on image-affecting changes.** Gate the workflow with a `paths:`
+  filter (source, Dockerfiles, dependency/lock files) so a docs/diagram/compose
+  commit doesn't burn a full multi-arch build. Same "what goes in an image" list
+  as above.
+
 ## Health checks and localhost inside containers
 
 A container healthcheck hitting `http://localhost:PORT` can fail if the server
