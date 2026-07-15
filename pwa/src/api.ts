@@ -57,11 +57,19 @@ export interface Recommendation {
   premium_frequency: string | null;
   currency: string;
   summary: string;
-  match_reasons: string[];
+  // Structured since the writer classifies each reason; strings still tolerated
+  // (older payloads / guided-mode fallbacks) and normalized in the UI.
+  match_reasons: (MatchReason | string)[];
+  match_strength?: "strong" | "partial";
   exclusions: string[];
   verified_at: string | null;
   source_url: string | null;
   coverage?: Record<string, unknown> | null;
+}
+
+export interface MatchReason {
+  text: string;
+  kind: "match" | "gap";
 }
 
 export type Recommendations = Record<string, Recommendation[]>;

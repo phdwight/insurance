@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { fetchComparison, type Comparison, type Recommendation, type Recommendations } from "../api";
+import {
+  fetchComparison,
+  type Comparison,
+  type MatchReason,
+  type Recommendation,
+  type Recommendations,
+} from "../api";
 import BrochurePanel from "./BrochurePanel";
 
 function peso(value: string | number | null): string {
@@ -41,13 +47,11 @@ const COMPARE_ROWS = [
   "verified_at",
 ];
 
-// A match is "strong" when no reason flags a gap; a reason that calls out
-// missing/unspecified data marks it "partial". Heuristic on the writer's
-// phrasing — enough to badge the card; a structured signal can replace it later.
-function isGapReason(reason: string): boolean {
-  return /\b(no|not|missing|unspecified|none)\b.*\b(specified|stated|available|provided|listed|given)\b|\bnot specified\b|\bno (maturity|term|premium|coverage)\b/i.test(
-    reason,
-  );
+// The writer classifies each reason as "match" or "gap"; normalize here so a
+// plain string (older payload / guided-mode fallback) is treated as a match.
+function normalizeReason(reason: MatchReason | string): MatchReason {
+  if (typeof reason === "string") return { text: reason, kind: "match" };
+  return { text: reason.text, kind: reason.kind === "gap" ? "gap" : "match" };
 }
 
 const NOT_SPEC = "Not specified";
@@ -108,8 +112,10 @@ function PolicyCard(props: {
   onToggle: () => void;
 }) {
   const { policy } = props;
-  const reasons = policy.match_reasons ?? [];
-  const strong = reasons.length > 0 && !reasons.some(isGapReason);
+  const reasons = (policy.match_reasons ?? []).map(normalizeReason);
+  const strong = policy.match_strength
+    ? policy.match_strength === "strong"
+    : reasons.length > 0 && !reasons.some((reason) => reason.kind === "gap");
   const stats = coverageStats(props.line, policy.coverage);
   const hasPremium = policy.premium_min != null || policy.premium_max != null;
   return (
@@ -159,13 +165,13 @@ function PolicyCard(props: {
 
         <ul className="reasons">
           {reasons.map((reason, index) => {
-            const gap = isGapReason(reason);
+            const gap = reason.kind === "gap";
             return (
               <li key={index} className={gap ? "gap" : "ok"}>
                 <span className="reason-icon" aria-hidden="true">
                   {gap ? "!" : "✓"}
                 </span>
-                {reason}
+                {reason.text}
               </li>
             );
           })}

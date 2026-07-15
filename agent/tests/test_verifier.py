@@ -4,6 +4,8 @@ import asyncio
 
 from agent import verifier
 
+GROUNDED = "Emergency medical coverage of PHP 2,500,000."
+
 
 def make_policy() -> dict:
     return {
@@ -11,8 +13,8 @@ def make_policy() -> dict:
         "premium_min": 550,
         "coverage": {"line": "travel", "medical_limit": 2500000},
         "match_reasons": [
-            "Emergency medical coverage of PHP 2,500,000.",  # grounded
-            "Includes free airport lounge access.",  # fabricated
+            {"text": GROUNDED, "kind": "match"},  # grounded
+            {"text": "Includes free airport lounge access.", "kind": "match"},  # fabricated
         ],
     }
 
@@ -35,7 +37,7 @@ def _patch_judges(monkeypatch, vote_by_model: dict[str, bool]) -> None:
 def test_unanimous_panel_drops_ungrounded_reason(monkeypatch) -> None:
     _patch_judges(monkeypatch, {"prov1:judge-a": True, "prov2:judge-b": True})
     policy = run(make_policy())
-    assert policy["match_reasons"] == ["Emergency medical coverage of PHP 2,500,000."]
+    assert policy["match_reasons"] == [{"text": GROUNDED, "kind": "match"}]
     assert policy["verification"]["reasons_dropped"] == 1
     assert policy["verification"]["judges"] == ["prov1:judge-a", "prov2:judge-b"]
 
@@ -44,8 +46,21 @@ def test_split_vote_rejects(monkeypatch) -> None:
     # judge-b rejects everything -> unanimity fails for ALL reasons -> fallback
     _patch_judges(monkeypatch, {"prov1:judge-a": True, "prov2:judge-b": False})
     policy = run(make_policy())
-    assert policy["match_reasons"] == [verifier.FALLBACK_REASON]
+    assert policy["match_reasons"] == [{"text": verifier.FALLBACK_REASON, "kind": "match"}]
     assert policy["verification"]["reasons_dropped"] == 2
+
+
+def test_gap_reasons_survive_even_when_judges_reject(monkeypatch) -> None:
+    # An honest "gap" note is not a coverage claim — it must never be judged away,
+    # or a partial match would silently look strong.
+    _patch_judges(monkeypatch, {"prov1:judge-a": True, "prov2:judge-b": False})
+    gap = "No trip cancellation limit is specified."
+    policy = make_policy()
+    policy["match_reasons"].append({"text": gap, "kind": "gap"})
+    result = run(policy)
+    kept = [reason["text"] for reason in result["match_reasons"]]
+    assert gap in kept
+    assert result["verification"]["reasons_checked"] == 2  # only the two positive claims
 
 
 def test_judge_exception_counts_as_rejection(monkeypatch) -> None:
@@ -71,7 +86,7 @@ def test_judge_exception_counts_as_rejection(monkeypatch) -> None:
 
     monkeypatch.setattr(verifier, "_judge_one", wrapped)
     policy = run(make_policy())
-    assert policy["match_reasons"] == [verifier.FALLBACK_REASON]
+    assert policy["match_reasons"] == [{"text": verifier.FALLBACK_REASON, "kind": "match"}]
     assert call_count == 4  # 2 reasons x 2 judges
 
 
