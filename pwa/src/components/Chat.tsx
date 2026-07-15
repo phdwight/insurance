@@ -34,7 +34,13 @@ export default function Chat(props: {
             {message.text}
           </div>
         ))}
-        {props.busy && <div className="bubble agent thinking">…</div>}
+        {props.busy && (
+          <div className="bubble agent thinking" role="status" aria-label="Assistant is typing">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 

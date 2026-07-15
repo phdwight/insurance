@@ -323,7 +323,56 @@ button[type="submit"] {
 }
 
 .bubble.thinking {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 16px;
+}
+
+.bubble.thinking .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: typing-bounce 1.2s infinite ease-in-out both;
+}
+
+.bubble.thinking .dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.bubble.thinking .dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Respect reduced-motion: pulse opacity instead of bouncing. */
+@media (prefers-reduced-motion: reduce) {
+  .bubble.thinking .dot {
+    animation: typing-fade 1.2s infinite ease-in-out both;
+  }
+  @keyframes typing-fade {
+    0%,
+    80%,
+    100% {
+      opacity: 0.3;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
 }
 
 .answer-chips {
