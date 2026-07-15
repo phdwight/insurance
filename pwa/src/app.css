@@ -82,13 +82,6 @@ button[type="submit"] {
   border-color: var(--accent);
 }
 
-button.link {
-  border: none;
-  background: none;
-  color: var(--accent);
-  padding: 4px;
-}
-
 /* Intake */
 .intake {
   min-height: calc(100dvh - 5.5rem);
@@ -371,6 +364,30 @@ button.link {
 .composer input:focus {
   outline: 2px solid var(--accent);
   border-color: transparent;
+}
+
+/* Start-over: icon-only in the composer row (matches input/Send height via the
+   flex row's default stretch), icon+label centered in the results view. */
+.composer-reset {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--accent);
+}
+
+.reset-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.75rem;
+}
+
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
 }
 
 /* Results */
