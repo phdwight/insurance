@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
-from ingestion import parsing, repository
+from ingestion import parsing, preview, repository
 from ingestion.prompts import PolicyDraft
 
 
@@ -148,6 +148,47 @@ def document_file(document_id: str, _auth: Protected = None) -> FileResponse:
     if document is None or not Path(document["file_ref"]).exists():
         raise HTTPException(status_code=404, detail="document not found")
     path = Path(document["file_ref"])
+    media = "application/pdf" if path.suffix.lower() == ".pdf" else "text/plain"
+    return FileResponse(path, media_type=media, filename=path.name)
+
+
+# Doc categories (assigned by the intake gate) safe to expose publicly — public
+# marketing material, never a PII-bearing policy_contract.
+PUBLIC_DOC_TYPES = {"brochure", "product_summary"}
+
+
+def _public_document(slug: str) -> Path:
+    """Resolve a published policy's source file IF it's publicly shareable (a
+    brochure/product summary). 404 otherwise — a contract is never exposed, and
+    an unpublished/unknown slug leaks nothing."""
+    doc = repository.get_published_source_document(slug)
+    if doc is None or doc.get("doc_type") not in PUBLIC_DOC_TYPES:
+        raise HTTPException(status_code=404, detail="no public brochure for this policy")
+    path = Path(doc["file_ref"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="brochure file missing")
+    return path
+
+
+@app.get("/policies/{slug}/brochure")
+def policy_brochure(slug: str) -> FileResponse:
+    """Public: the cover page of a published policy's brochure as a PNG. No token
+    — only brochures/product summaries are eligible. Rendered once from the
+    stored PDF and cached on disk."""
+    path = _public_document(slug)
+    if path.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=404, detail="no brochure image")
+    cover = preview.render_cover(path, docs_dir() / "thumbnails" / f"{path.stem}-cover.png")
+    if cover is None:
+        raise HTTPException(status_code=404, detail="brochure image unavailable")
+    return FileResponse(cover, media_type="image/png")
+
+
+@app.get("/policies/{slug}/document")
+def policy_document(slug: str) -> FileResponse:
+    """Public: the original brochure document for a published policy (inline).
+    Same eligibility as the cover image — contracts are never exposed."""
+    path = _public_document(slug)
     media = "application/pdf" if path.suffix.lower() == ".pdf" else "text/plain"
     return FileResponse(path, media_type=media, filename=path.name)
 

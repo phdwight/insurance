@@ -54,7 +54,7 @@ Product and process decisions made by the project owner across sessions. Don't r
 - **Dynamic elicitation over static forms** — the catalog is fetched first and questions derive from candidate disagreement (see Architecture decisions above).
 
 ### Security & retention
-- **Ingestion data surface is token-gated** (`ADMIN_TOKEN`, constant-time compare, bearer or `?token=`); `/health` and the data-free `/admin` shell stay open. Empty token = open = local dev only. New ingestion endpoints must take the `Protected` dependency.
+- **Ingestion data surface is token-gated** (`ADMIN_TOKEN`, constant-time compare, bearer or `?token=`); `/health` and the data-free `/admin` shell stay open. Empty token = open = local dev only. New ingestion endpoints must take the `Protected` dependency. **Exception: the public brochure endpoints** (`GET /policies/{slug}/brochure` cover image, `GET /policies/{slug}/document`) are intentionally un-gated so end users can see brochures in results — but they serve a file **only** when the policy is published AND its source doc_type is `brochure`/`product_summary` (`PUBLIC_DOC_TYPES`); a `policy_contract` (possible PII) or unpublished/unknown slug 404s. Any new public file endpoint must apply the same eligibility gate.
 - **Conversation retention:** `app.sessions` tracks last-seen per thread; an hourly agent task purges checkpoint rows idle past `SESSION_TTL_DAYS` (default 30) — DPA minimization, not a conversation timeout. Retention failures log and retry; they never take the service down.
 
 ### Process

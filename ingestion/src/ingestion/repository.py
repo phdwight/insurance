@@ -264,6 +264,25 @@ def get_review(run_id: str) -> dict[str, Any] | None:
         return dict(row._mapping) if row else None
 
 
+def get_published_source_document(slug: str) -> dict[str, Any] | None:
+    """The source document behind a published policy's current version, for the
+    public brochure/document endpoints. Returns file_ref + doc_type, or None if
+    the policy isn't published (so callers can 404 without leaking anything)."""
+    sql = text(
+        """
+        SELECT sd.id, sd.file_ref, sd.doc_type
+        FROM catalog.policies p
+        JOIN catalog.policy_versions v
+            ON v.policy_id = p.id AND v.superseded_at IS NULL AND v.published_at IS NOT NULL
+        JOIN catalog.source_documents sd ON sd.id = v.source_document_id
+        WHERE p.slug = :slug AND p.status = 'published'
+        """
+    )
+    with get_engine().connect() as conn:
+        row = conn.execute(sql, {"slug": slug}).first()
+        return dict(row._mapping) if row else None
+
+
 def reject(run_id: str, reviewed_by: str) -> None:
     with get_engine().begin() as conn:
         conn.execute(
