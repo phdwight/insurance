@@ -251,7 +251,7 @@ def get_review(run_id: str) -> dict[str, Any] | None:
     sql = text(
         """
         SELECT r.id, r.status, r.model, r.output, r.source_document_id,
-               d.insurer_id, d.file_ref, d.parse_status,
+               d.insurer_id, d.file_ref, d.parse_status, d.doc_type,
                i.slug AS insurer_slug, i.name AS insurer_name
         FROM catalog.extraction_runs r
         JOIN catalog.source_documents d ON d.id = r.source_document_id

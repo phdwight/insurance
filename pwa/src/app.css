@@ -1,11 +1,14 @@
 :root {
   --accent: #1f4b3a;
   --accent-dark: #163a2d;
+  --accent-soft: #e3f0e8;
   --ink: #14171a;
   --muted: #667069;
-  --border: #d7ddd7;
+  --border: #dde3dd;
   --bg: #e9ece8;
   --card: #ffffff;
+  --panel: #f6f8f5;
+  --live: #35c07a;
 }
 
 * {
@@ -20,31 +23,85 @@ body {
 }
 
 main {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 0 1rem 4rem;
+  max-width: 680px;
+  min-height: calc(100dvh - 4.5rem);
+  margin: 1.25rem auto 3.25rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 14px 46px rgba(20, 40, 30, 0.1);
+  padding: 0 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Once results show, the card grows with content instead of stretching the
+   conversation to fill the viewport. */
+main.done .chat,
+main.done .messages {
+  flex: none;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem 0;
+  gap: 12px;
+  padding: 0.9rem 1.5rem;
+  margin: 0 -1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-id {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.brand-avatar {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--live);
+  border: 2px solid var(--card);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .brand {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.brand-sub {
+  font-size: 0.8rem;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .licensed {
@@ -84,11 +141,11 @@ button[type="submit"] {
 
 /* Intake */
 .intake {
-  min-height: calc(100dvh - 5.5rem);
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding-bottom: 1.5rem;
+  padding: 1.5rem 0;
 }
 
 .intake-hero {
@@ -183,20 +240,31 @@ button[type="submit"] {
 
 .chip {
   flex: 1 1 0;
-  min-width: 90px;
+  min-width: 84px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 14px 10px;
-  border-radius: 14px;
+  gap: 7px;
+  padding: 11px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
   font-weight: 600;
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   color: var(--ink);
 }
 
 .chip:hover {
   border-color: var(--accent);
+  background: var(--panel);
+}
+
+.chip-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--live);
 }
 
 .chip-count {
@@ -292,34 +360,83 @@ button[type="submit"] {
 }
 
 /* Chat */
-.messages {
+.chat {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 1rem 0;
+}
+
+.messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 1.25rem 0;
+}
+
+.day-sep {
+  display: flex;
+  justify-content: center;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.day-sep span {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.msg-row.user {
+  justify-content: flex-end;
+}
+
+.msg-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-avatar.hidden {
+  visibility: hidden;
 }
 
 .bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 14px;
+  max-width: 82%;
+  padding: 11px 15px;
+  border-radius: 16px;
   font-size: 0.95rem;
   line-height: 1.45;
   white-space: pre-wrap;
 }
 
 .bubble.user {
-  align-self: flex-end;
   background: var(--accent);
   color: white;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 5px;
 }
 
 .bubble.agent {
-  align-self: flex-start;
   background: var(--card);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 5px;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.04);
 }
 
 .bubble.thinking {
@@ -398,21 +515,48 @@ button[type="submit"] {
 
 .composer {
   display: flex;
+  align-items: stretch;
   gap: 8px;
 }
 
 .composer input {
   flex: 1;
+  min-width: 0;
   font: inherit;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
   background: var(--card);
 }
 
 .composer input:focus {
   outline: 2px solid var(--accent);
   border-color: transparent;
+}
+
+.send-btn {
+  flex: 0 0 auto;
+  width: 46px;
+  padding: 0;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #000;
+}
+
+.composer-note {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin: 10px 0 0;
 }
 
 /* Start-over: icon-only in the composer row (matches input/Send height via the
@@ -648,21 +792,21 @@ button[type="submit"] {
 }
 
 /* Brochure panel */
+/* Show the WHOLE cover at its natural aspect ratio (fixed width, auto height),
+   so a portrait, landscape, or tall cover is never awkwardly cropped. */
 .brochure {
-  flex: 0 0 168px;
-  align-self: stretch;
-  min-height: 224px;
+  flex: 0 0 180px;
+  align-self: flex-start;
   border-radius: 10px;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   text-decoration: none;
 }
 
 a.brochure {
+  display: block;
+  line-height: 0;
   border: 1px solid var(--border);
-  background: var(--card);
+  background: var(--panel);
   transition:
     box-shadow 0.15s,
     transform 0.15s;
@@ -675,17 +819,19 @@ a.brochure:hover {
 
 .brochure img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
+  height: auto;
   display: block;
 }
 
 .brochure-empty {
+  display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
+  aspect-ratio: 3 / 4;
   border: 1px dashed var(--border);
-  background: #f6f8f5;
+  background: var(--panel);
   color: var(--muted);
   font-size: 0.8rem;
   text-align: center;
@@ -698,7 +844,10 @@ a.brochure:hover {
   }
   .brochure {
     flex-basis: auto;
-    min-height: 180px;
+    width: 100%;
+  }
+  .brochure-empty {
+    aspect-ratio: 16 / 9;
   }
   .stat-row {
     grid-template-columns: 1fr;
