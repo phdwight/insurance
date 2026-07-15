@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Question } from "../api";
+import { SendIcon, ShieldIcon } from "./icons";
 import ResetButton from "./ResetButton";
 
 export interface ChatMessage {
@@ -29,16 +30,34 @@ export default function Chat(props: {
   return (
     <div className="chat">
       <div className="messages">
-        {props.messages.map((message, index) => (
-          <div key={index} className={`bubble ${message.role}`}>
-            {message.text}
-          </div>
-        ))}
+        <div className="day-sep">
+          <span>Today</span>
+        </div>
+        {props.messages.map((message, index) => {
+          const agent = message.role === "agent";
+          // one avatar per consecutive run of agent messages
+          const firstOfRun = agent && props.messages[index - 1]?.role !== "agent";
+          return (
+            <div key={index} className={`msg-row ${message.role}`}>
+              {agent && (
+                <span className={`msg-avatar ${firstOfRun ? "" : "hidden"}`} aria-hidden="true">
+                  <ShieldIcon size={15} />
+                </span>
+              )}
+              <div className={`bubble ${message.role}`}>{message.text}</div>
+            </div>
+          );
+        })}
         {props.busy && (
-          <div className="bubble agent thinking" role="status" aria-label="Assistant is typing">
-            <span className="dot" />
-            <span className="dot" />
-            <span className="dot" />
+          <div className="msg-row agent">
+            <span className="msg-avatar" aria-hidden="true">
+              <ShieldIcon size={15} />
+            </span>
+            <div className="bubble agent thinking" role="status" aria-label="Assistant is typing">
+              <span className="dot" />
+              <span className="dot" />
+              <span className="dot" />
+            </div>
           </div>
         )}
         <div ref={endRef} />
@@ -79,10 +98,20 @@ export default function Chat(props: {
             inputMode={numeric ? "numeric" : "text"}
             disabled={props.busy}
           />
-          <button type="submit" disabled={props.busy || !text.trim()}>
-            Send
+          <button
+            type="submit"
+            className="send-btn"
+            disabled={props.busy || !text.trim()}
+            aria-label="Send"
+          >
+            <SendIcon />
           </button>
         </form>
+      )}
+      {!props.done && (
+        <p className="composer-note">
+          Information only — not insurance advice. Confirm terms with the insurer.
+        </p>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchProductLines, type ProductLine } from "../api";
+import { SendIcon } from "./icons";
 
 const ArrowIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -58,7 +59,7 @@ export default function Intake(props: {
             aria-label="Describe what you want to protect"
           />
           <button type="submit" className="hero-send" disabled={!text.trim()} aria-label="Start">
-            <ArrowIcon />
+            <SendIcon size={19} />
           </button>
         </form>
 
@@ -70,6 +71,7 @@ export default function Intake(props: {
                 className="chip"
                 onClick={() => props.onSubmit(`I want ${line.code} insurance`, "guided")}
               >
+                <span className="chip-dot" aria-hidden="true" />
                 {line.name.replace(" Insurance", "")}
                 <span className="chip-count">{line.policy_count}</span>
               </button>

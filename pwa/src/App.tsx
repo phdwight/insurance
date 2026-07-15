@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { newSessionId, streamChat, type Question, type Recommendations } from "./api";
 import Chat, { type ChatMessage } from "./components/Chat";
+import { ShieldIcon } from "./components/icons";
 import Intake from "./components/Intake";
 import ResetButton from "./components/ResetButton";
 import Results from "./components/Results";
@@ -58,29 +59,22 @@ export default function App() {
   }
 
   return (
-    <main>
+    <main className={done ? "done" : ""}>
       <header className="topbar">
-        <span className="brand">Safe Harbor</span>
-        <div className="topbar-right">
-          <span className="licensed">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M9 12l2 2 4-4"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Licensed
+        <div className="brand-id">
+          <span className="brand-avatar">
+            <ShieldIcon size={20} />
+            <span className="status-dot" />
+          </span>
+          <span className="brand-text">
+            <span className="brand">Safe Harbor</span>
+            <span className="brand-sub">Finds honest matches — never a forced fit</span>
           </span>
         </div>
+        <span className="licensed">
+          <ShieldIcon size={13} />
+          Licensed
+        </span>
       </header>
 
       {!started ? (
