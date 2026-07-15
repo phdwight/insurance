@@ -93,12 +93,12 @@ manual fallback for building/publishing locally.
 IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
 
 # On the TARGET host — only this file + .env are needed:
-cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL
+cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL, VITE_INGESTION_URL
 docker compose -f docker-compose.prod.yml --env-file .env pull   # get the latest images
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 
-`CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser (e.g. `http://<host>:41501`, or an HTTPS domain). Front the published ports with a TLS-terminating reverse proxy for anything internet-facing. Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe).
+`CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser (e.g. `http://<host>:41501`, or an HTTPS domain). `VITE_INGESTION_URL` is optional — set it to the public ingestion address to show brochure cover thumbnails + document links in results (empty = feature off; must be `https` when the PWA is `https`, or covers are blocked as mixed content). Front the published ports with a TLS-terminating reverse proxy for anything internet-facing. Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe).
 
 ## Local development (without Docker)
 

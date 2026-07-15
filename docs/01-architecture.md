@@ -47,7 +47,7 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 
 **Upload portal / reviewer UI** *(implemented at `:8003/admin`)*
 - Single static page served by the ingestion service: upload policy documents (PDF/txt/md — the insurer and product line are detected from the document, not pre-declared), review the extracted draft side-by-side with the source, approve/reject
-- Auth: the whole data surface requires `ADMIN_TOKEN` (bearer or `?token=`); empty token = open, local dev only
+- Auth: the data surface requires `ADMIN_TOKEN` (bearer or `?token=`); empty token = open, local dev only. **Exception:** two public, tokenless endpoints serve brochure previews to end users — `GET /policies/{slug}/brochure` (cover image) and `GET /policies/{slug}/document` — but only for a *published* policy whose source `doc_type` is `brochure`/`product_summary`; a contract or unpublished slug 404s
 
 **Ingestion pipeline**
 - Durable queue + dedicated worker: the upload endpoint stores the file and enqueues a run (returns immediately); a separate `ingestion-worker` process claims runs (Postgres `FOR UPDATE SKIP LOCKED`) → parse → LLM extraction into the policy schema → human review queue → validation on approve → publish to catalog. A crashed worker's in-flight run is requeued, so a restart never strands an upload
@@ -66,6 +66,7 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 1. **Ingestion:** Agent uploads PDF → parsed → LLM maps to schema → reviewer approves → row published to catalog + embeddings generated → immediately queryable via MCP.
 2. **Recommendation:** User free-text → LangGraph extracts needs profile → agent calls MCP `search_policies` per product line → ranks/filters → composes explanation → streams to PWA.
 3. **Guided mode:** Same graph, but a questionnaire node fills the needs profile field-by-field instead of the extraction node.
+4. **Brochure preview:** In results, the PWA loads a policy's cover image + document **directly** from the ingestion service's public endpoints (bypassing the API/MCP path) — the one client→ingestion interaction that isn't token-gated (see the eligibility gate above).
 
 ## Cross-cutting decisions
 

@@ -9,22 +9,31 @@ One graph serves both intake modes. Free-form chat extracts a **NeedsProfile** f
 ## State
 
 ```python
-class NeedsProfile(TypedDict):
-    product_lines: list[str]          # detected: ["life", "travel", ...]
-    demographics: dict                # age, dependents, location, occupation
-    budget: dict                      # amount, frequency, currency (PHP)
-    per_line_details: dict            # line-specific fields, e.g. travel.destinations
+class NeedsProfile(BaseModel):       # shared/needs.py — flat, validated fields
+    product_lines: list[ProductLine]  # detected: ["life", "travel", ...]
+    age: int | None                   # 0–120
+    dependents: int | None
+    location: str | None
+    occupation: str | None
+    budget_amount: Decimal | None     # PHP
+    budget_frequency: PremiumFrequency | None
+    per_line: dict[str, dict]         # line-specific, e.g. per_line["travel"]["destination_region"]
     risk_notes: list[str]             # smoker, pre-existing conditions (sensitive!)
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):   # agent/state.py
     messages: Annotated[list, add_messages]
     mode: Literal["freeform", "guided"]
-    profile: NeedsProfile
+    profile: dict                     # NeedsProfile.model_dump() (plain dict in state)
+    pending_question: str | None      # question text awaiting an answer
+    pending_disc: str | None          # discriminator id (or "budget") being asked
+    question: dict | None             # {text, input_type, options} for the UI
+    asked: list[str]                  # discriminator ids already used
+    questions_asked: int              # question budget tracking
+    turn_count: int                   # total user turns (hard session cap, MAX_TURNS)
+    bootstrap_count: int              # "what to protect" asks (MAX_BOOTSTRAP_TURNS)
     candidates: dict[str, list]       # per line: full policy records, narrowed
     recommendations: dict[str, list]  # per line: verified + explained
-    pending_disc: str | None          # discriminator being asked
-    asked: list[str]                  # discriminators already used
-    questions_asked: int              # question budget tracking
+    done: bool
 ```
 
 Checkpointed to Postgres (LangGraph checkpointer) so sessions survive refreshes — important for a PWA.
@@ -70,6 +79,13 @@ candidate set until a match (or an honest no-match) falls out.
 **verify_explanations (multi-LLM panel).** After `explain`, a panel of judge models — configured via `VERIFIER_MODELS`, at least two, ideally from different providers than the writer — independently fact-checks each positive `match` reason against the policy's verified fields (honest `gap` notes about missing data aren't coverage claims, so they're never judged away — dropping them would make a partial match look strong). A match reason survives only on a unanimous "grounded" vote; failed reasons are dropped silently (a policy whose reasons all fail gets a generic fallback line — the panel never removes a policy, since `rank_and_verify` already validated it). A judge error counts as a rejection, and the whole node is a no-op when fewer than two judges are configured, so the panel can only ever make output stricter, never break it.
 
 **present.** Emits JSON the PWA renders natively (cards, compare matrix) — not a wall of markdown.
+
+## Model configuration
+
+Models are provider-agnostic `init_chat_model` strings: writer = frontier `LLM_MODEL`, extractor = small `LLM_MODEL_SMALL`, judges = `VERIFIER_MODELS` (≥2, cross-provider). Two provider-specific details are load-bearing:
+
+- **OpenAI models are routed through the Responses API** (`chat_model()` in `agent/llm.py` sets `use_responses_api=True`). OpenAI reasoning models (gpt-5.x) reject **function tools together with `reasoning_effort`** on `/v1/chat/completions` — and "function tools" includes `with_structured_output(method="function_calling")`. The Responses API supports both, so every OpenAI call site (writer, extractor, judges) inherits the fix. Other providers are untouched.
+- **The extractor forces `method="function_calling"`** for `NeedsProfile` because its `per_line` is an **open-ended map**, which OpenAI's strict `json_schema` mode can't express (it demands `additionalProperties:false` everywhere). That's exactly why the Responses API routing above matters — otherwise a reasoning model would 400 on the first turn.
 
 ## Anti-loop guardrails
 
