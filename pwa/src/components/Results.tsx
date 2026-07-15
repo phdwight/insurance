@@ -6,6 +6,16 @@ function peso(value: string | number | null): string {
   return `₱${Number(value).toLocaleString()}`;
 }
 
+/** Normalize a value for display: treat JS null/undefined AND null-ish strings
+ *  ("null", "undefined", "none", empty) that leak through from extraction as
+ *  genuinely missing, so the raw word "null" never reaches the user. */
+function clean(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text || ["null", "undefined", "none", "n/a"].includes(text.toLowerCase())) return null;
+  return text;
+}
+
 function renderValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "yes" : "no";
@@ -16,7 +26,7 @@ function renderValue(value: unknown): string {
       .map(([key, v]) => `${key.replaceAll("_", " ")}: ${renderValue(v)}`)
       .join(" · ") || "—";
   }
-  return String(value);
+  return clean(value) ?? "—";
 }
 
 const COMPARE_ROWS = [
@@ -44,7 +54,7 @@ function PolicyCard(props: {
           compare
         </label>
         <h3>{policy.name}</h3>
-        <p className="insurer">{policy.insurer_name}</p>
+        <p className="insurer">{clean(policy.insurer_name) ?? "Insurer not specified"}</p>
       </header>
       <p className="premium">
         {peso(policy.premium_min)} – {peso(policy.premium_max)}
