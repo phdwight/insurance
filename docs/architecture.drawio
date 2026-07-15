@@ -31,10 +31,10 @@
         <mxCell id="mcp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="MCP Server&#xa;catalog tools&#xa;(:8002)" vertex="1">
           <mxGeometry height="66" width="170" x="880" y="252" as="geometry" />
         </mxCell>
-        <mxCell id="ingestion" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Ingestion (web)&#xa;upload → enqueue ·&#xa;human review · publish&#xa;(:41502)" vertex="1">
+        <mxCell id="ingestion" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Ingestion (web)&#xa;upload → enqueue · review · publish&#xa;+ public brochure cover / doc&#xa;(:41502)" vertex="1">
           <mxGeometry height="94" width="170" x="560" y="600" as="geometry" />
         </mxCell>
-        <mxCell id="worker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Ingestion worker&#xa;claim queue · parse (docling)&#xa;· LLM extract · finalize" vertex="1">
+        <mxCell id="worker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="Ingestion worker&#xa;claim queue · parse (vision/docling)&#xa;· LLM extract · finalize" vertex="1">
           <mxGeometry height="94" width="200" x="890" y="600" as="geometry" />
         </mxCell>
         <mxCell id="pg" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="PostgreSQL + pgvector&#xa;policy catalog ·&#xa;checkpoints · sessions" vertex="1">
@@ -148,6 +148,13 @@
               <mxPoint x="746" y="95" />
               <mxPoint x="1490" y="95" />
               <mxPoint x="1490" y="648" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="pwa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" target="ingestion" value="brochure · doc (public)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="245" y="560" />
             </Array>
           </mxGeometry>
         </mxCell>

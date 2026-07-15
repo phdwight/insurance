@@ -64,10 +64,14 @@ offline).
   pushed by a user PAT won't accept the workflow's `GITHUB_TOKEN` until the
   package grants the repo write access (package → Manage Actions access → add the
   repo, Write). New packages the workflow creates are linked automatically.
-- **Only rebuild on image-affecting changes.** Gate the workflow with a `paths:`
-  filter (source, Dockerfiles, dependency/lock files) so a docs/diagram/compose
-  commit doesn't burn a full multi-arch build. Same "what goes in an image" list
-  as above.
+- **Only rebuild on image-affecting changes — and only the images that changed.**
+  Two gates: (1) a top-level `paths:` filter so a docs/diagram/compose commit
+  doesn't trigger the workflow at all; (2) a per-image change-detection job
+  (e.g. `dorny/paths-filter`) that emits the build matrix, so a `pwa/`-only change
+  rebuilds just pwa, not all six. Shared inputs (`shared/`, lockfile, base
+  Dockerfile) legitimately fan out to every image that embeds them — map each
+  image to *its* paths plus the shared set. Without the second gate, one changed
+  service still burns a full multi-arch build of everything.
 
 ## Health checks and localhost inside containers
 
