@@ -792,21 +792,21 @@ button[type="submit"] {
 }
 
 /* Brochure panel */
+/* Show the WHOLE cover at its natural aspect ratio (fixed width, auto height),
+   so a portrait, landscape, or tall cover is never awkwardly cropped. */
 .brochure {
-  flex: 0 0 168px;
-  align-self: stretch;
-  min-height: 224px;
+  flex: 0 0 180px;
+  align-self: flex-start;
   border-radius: 10px;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   text-decoration: none;
 }
 
 a.brochure {
+  display: block;
+  line-height: 0;
   border: 1px solid var(--border);
-  background: var(--card);
+  background: var(--panel);
   transition:
     box-shadow 0.15s,
     transform 0.15s;
@@ -819,17 +819,19 @@ a.brochure:hover {
 
 .brochure img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
+  height: auto;
   display: block;
 }
 
 .brochure-empty {
+  display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
+  aspect-ratio: 3 / 4;
   border: 1px dashed var(--border);
-  background: #f6f8f5;
+  background: var(--panel);
   color: var(--muted);
   font-size: 0.8rem;
   text-align: center;
@@ -842,7 +844,10 @@ a.brochure:hover {
   }
   .brochure {
     flex-basis: auto;
-    min-height: 180px;
+    width: 100%;
+  }
+  .brochure-empty {
+    aspect-ratio: 16 / 9;
   }
   .stat-row {
     grid-template-columns: 1fr;
