@@ -314,7 +314,7 @@ def test_admin_ui_and_supporting_endpoints(monkeypatch, tmp_path) -> None:
     # admin page serves the reviewer workflow markers
     page = client.get("/admin")
     assert page.status_code == 200
-    for marker in ("Review queue", "Approve", "upload-form", "/reviews"):
+    for marker in ("Review queue", "Approve", "dropzone", "/reviews"):
         assert marker in page.text
 
     # insurer dropdown data
@@ -434,7 +434,8 @@ def test_vision_routes_clean_pdf_to_docling(monkeypatch, tmp_path) -> None:
     drain_worker()
     parse_status = list(repo.parse_statuses.values())[-1]
     assert "parsed:pypdf" in parse_status  # real text layer -> no vision recovery
-    assert "vision → docling" in parse_status
+    # the verbose triage reason is NOT dumped into the reviewer status (it's logged)
+    assert "clean digital text" not in parse_status
 
 
 def test_vision_recovers_thin_docling_text(monkeypatch, tmp_path) -> None:

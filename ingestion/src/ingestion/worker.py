@@ -30,7 +30,9 @@ async def _to_text(filename: str, data: bytes) -> tuple[str, str, str | None]:
     if filename.lower().endswith(".pdf") and vision.vision_enabled():
         markdown, route, reason = await vision.triage(filename, data)
         if route == "self" and markdown:
-            return markdown, "llm-vision", f"vision self-transcribed: {reason}"
+            # The parser label ("llm-vision") already says the AI read it; the
+            # verbose triage reason only clutters the reviewer status (it's logged).
+            return markdown, "llm-vision", None
         # docling route — but recover via vision if the PDF has no real text layer
         # (image-heavy/designed brochures: docling yields only image placeholders).
         try:
@@ -42,11 +44,13 @@ async def _to_text(filename: str, data: bytes) -> tuple[str, str, str | None]:
         if vision.is_thin(text):
             transcribed = await vision.transcribe(filename, data)
             if transcribed and not vision.is_thin(transcribed):
-                return transcribed, "llm-vision", "thin text layer → vision transcribed"
+                return transcribed, "llm-vision", "no text layer — read from page images"
             raise parsing.UnsupportedDocument(
                 "image-only PDF: no extractable text and vision transcription unavailable"
             )
-        return text, parser, " · ".join(x for x in (f"vision → docling: {reason}", dnote) if x)
+        # Normal path: vision routed a clean-text PDF to docling. The parser label
+        # says "docling"; only surface a note if docling actually fell back (dnote).
+        return text, parser, dnote
     return await anyio.to_thread.run_sync(parsing.extract_text, filename, data)
 
 
@@ -95,11 +99,12 @@ async def _process(run_id: str, document_id: str, file_ref: str | None) -> None:
             document_text, redacted = gate.redacted_text, True
         repository.update_doc_type(document_id, gate.category)
 
-    # Fold parser, size, redaction, and any docling->pypdf fallback reason into
-    # parse_status so it stays visible in the reviewer UI.
-    parse_status = f"parsed:{parser} ({len(document_text)} chars)"
+    # Reviewer-facing status: which parser produced the text + size, a ⚠ note
+    # ONLY when the parser fell back or recovered (never for the normal path),
+    # and whether PII was redacted.
+    parse_status = f"parsed:{parser} ({len(document_text):,} chars)"
     if parser_note:
-        parse_status += f" — ⚠ {parser_note}"
+        parse_status += f" · ⚠ {parser_note}"
     if redacted:
         parse_status += " · PII redacted"
     repository.update_parse_status(document_id, parse_status)
