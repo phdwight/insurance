@@ -69,6 +69,22 @@ def test_partial_draft_missing_insurer_still_reaches_review(monkeypatch) -> None
     assert output["name"] == "Demo Voyager"
 
 
+def test_placeholder_insurer_is_rejected() -> None:
+    # A stringy "null"/"none"/etc. must never pass as a real insurer — publish
+    # get-or-creates the insurer, so this would create a garbage catalog entry.
+    for bad in ("null", "None", "N/A", "  unknown  ", ""):
+        with pytest.raises(ValidationError):
+            PolicyDraft.model_validate({**FULL_DRAFT, "insurer_name": bad})
+
+
+def test_placeholder_insurer_stays_in_review_not_published(monkeypatch) -> None:
+    # If the extractor emits a stringy "null" insurer, the draft drops to the
+    # partial-review path (pending_review) — never a publishable validated draft.
+    output, status, _model = _extract(monkeypatch, {**FULL_DRAFT, "insurer_name": "null"})
+    assert status == "pending_review"
+    assert output["name"] == "Demo Voyager"  # the rest is kept for the reviewer
+
+
 def test_provider_error_is_captured_as_extraction_failed(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 

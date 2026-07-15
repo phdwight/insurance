@@ -126,6 +126,24 @@ class PolicyDraft(PolicyVersion):
             data[name] = normalize_amount(data[name])
         return data
 
+    @field_validator("insurer_name", mode="before")
+    @classmethod
+    def _reject_placeholder_insurer(cls, value: object) -> object:
+        """The insurer is required to publish (publish get-or-creates it), so a
+        null-ish placeholder must never pass as a real name. Strip it and reject
+        'null'/'none'/'n/a'/'unknown' so approval forces a real insurer. A true
+        None falls through to the normal required-field error (partial draft →
+        human review)."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.lower() in {"", "null", "none", "n/a", "na", "undefined", "unknown"}:
+                raise ValueError(
+                    "insurer_name is missing — enter the insurer exactly as "
+                    "printed in the document"
+                )
+            return stripped
+        return value
+
     @field_validator("effective_date", mode="before")
     @classmethod
     def _parse_document_date(cls, value: object) -> object:
