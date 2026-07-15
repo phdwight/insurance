@@ -314,7 +314,7 @@ def test_admin_ui_and_supporting_endpoints(monkeypatch, tmp_path) -> None:
     # admin page serves the reviewer workflow markers
     page = client.get("/admin")
     assert page.status_code == 200
-    for marker in ("Review queue", "Approve", "upload-form", "/reviews"):
+    for marker in ("Review queue", "Approve", "dropzone", "/reviews"):
         assert marker in page.text
 
     # insurer dropdown data

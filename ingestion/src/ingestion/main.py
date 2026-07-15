@@ -187,6 +187,12 @@ def reject(run_id: str, request: RejectionRequest, _auth: Protected = None) -> d
     return {"status": "rejected"}
 
 
+@app.get("/stats")
+def stats(_auth: Protected = None) -> dict:
+    """Dashboard counts: published policies + runs by status."""
+    return repository.review_stats()
+
+
 @app.get("/insurers")
 def insurers(_auth: Protected = None) -> list[dict]:
     return repository.list_insurers()

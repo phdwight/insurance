@@ -5,96 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Policy ingestion — review</title>
 <style>
-  :root { --accent:#0f766e; --border:#e5e7eb; --muted:#6b7280; --bg:#fafaf9; }
+  :root {
+    --accent:#1f4b3a; --accent-dark:#163a2d; --accent-soft:#e3f0e8;
+    --ink:#14171a; --muted:#697069; --border:#dfe3df; --bg:#eceeea;
+    --card:#ffffff; --panel:#f6f8f5; --live:#35c07a;
+    --blue:#2563eb; --amber:#c07f16; --red:#c23b3b; --gray:#9aa29a;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:#1a1a1a; }
-  main { max-width:960px; margin:0 auto; padding:1rem 1rem 4rem; }
-  h1 { font-size:1.3rem; color:#0b5a54; }
-  h2 { font-size:1.05rem; margin:1.6rem 0 .5rem; }
-  section { background:#fff; border:1px solid var(--border); border-radius:12px; padding:1rem 1.2rem; margin-bottom:1rem; }
-  label { display:block; font-size:.8rem; color:var(--muted); margin:.6rem 0 .2rem; }
-  input,select,textarea,button { font:inherit; }
-  input,select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; width:100%; max-width:420px; background:#fff; }
-  textarea { width:100%; min-height:340px; border:1px solid var(--border); border-radius:8px; padding:10px; font-family:ui-monospace,monospace; font-size:.82rem; }
-  button { cursor:pointer; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 16px; margin-right:8px; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.danger { color:#b91c1c; border-color:#b91c1c; }
-  .tabs button.active { border-color:var(--accent); color:#0b5a54; font-weight:600; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .item { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:8px 0; cursor:pointer; }
-  .item:hover { border-color:var(--accent); }
-  .meta { font-size:.78rem; color:var(--muted); }
-  .msg { font-size:.85rem; margin-top:8px; white-space:pre-wrap; }
-  .msg.ok { color:#15803d; } .msg.err { color:#b91c1c; } .msg.warn { color:#b45309; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:920px; margin:0 auto; padding:2rem 1.25rem 5rem; }
   a { color:var(--accent); }
-  button:disabled { opacity:.6; cursor:progress; }
-  .spinner { display:inline-block; width:13px; height:13px; margin-right:8px;
-    border:2px solid rgba(255,255,255,.45); border-top-color:#fff;
-    border-radius:50%; vertical-align:-2px; animation:spin .8s linear infinite; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; background:var(--panel); padding:1px 5px; border-radius:5px; }
+
+  /* Header */
+  .page-head { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:1.5rem; }
+  .eyebrow { display:flex; align-items:center; gap:7px; font-size:.72rem; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 .5rem; }
+  .page-head h1 { margin:0; font-family:"Iowan Old Style",Georgia,"Times New Roman",serif; font-size:2.6rem; line-height:1.05; letter-spacing:-.01em; color:var(--accent-dark); }
+  .page-head .sub { margin:.6rem 0 0; color:var(--muted); font-size:1rem; line-height:1.5; max-width:44ch; }
+  .stats { display:flex; gap:12px; flex:none; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px 18px; text-align:center; min-width:74px; }
+  .stat .num { display:block; font-size:1.7rem; font-weight:700; line-height:1; }
+  .stat .lbl { display:block; font-size:.62rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:5px; }
+
+  /* Cards */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:1.6rem 1.75rem; margin-bottom:1.25rem; box-shadow:0 8px 30px rgba(20,40,30,.05); }
+  .card-head { display:flex; align-items:center; gap:11px; margin-bottom:.35rem; }
+  .step-badge { flex:none; width:26px; height:26px; border-radius:50%; background:var(--accent-dark); color:#fff; font-size:.8rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .card-head h2 { margin:0; font-size:1.15rem; }
+  .card .sub { margin:.1rem 0 1.2rem; color:var(--muted); font-size:.92rem; line-height:1.55; }
+  .note { color:var(--muted); font-size:.8rem; margin:1rem 0 0; }
+
+  /* Dropzone */
+  .dropzone { display:flex; align-items:center; gap:18px; border:1.5px dashed var(--border); border-radius:14px; padding:22px 24px; cursor:pointer; transition:border-color .15s, background .15s; }
+  .dropzone:hover, .dropzone.drag { border-color:var(--accent); background:var(--panel); }
+  .dz-icon { flex:none; width:56px; height:56px; border-radius:14px; background:var(--accent-soft); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; }
+  .dropzone strong { font-size:1rem; }
+  .dropzone .meta { color:var(--muted); font-size:.82rem; margin-top:2px; }
+
+  /* Active upload */
+  .upload-card { border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-top:16px; }
+  .uc-top { display:flex; align-items:center; gap:14px; }
+  .file-icon { flex:none; width:42px; height:42px; border-radius:10px; background:#fdecec; color:var(--red); display:inline-flex; align-items:center; justify-content:center; }
+  .uc-name { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .uc-sub { color:var(--muted); font-size:.82rem; margin-top:2px; }
+  .pill { flex:none; display:inline-flex; align-items:center; gap:7px; padding:6px 13px; border-radius:999px; font-size:.82rem; font-weight:600; }
+  .pill.work { background:var(--accent-soft); color:var(--accent); }
+  .pill.done { background:#e3f0e8; color:var(--accent); }
+  .pill.err { background:#fdecec; color:var(--red); }
+
+  /* Step tracker */
+  .steps { display:flex; align-items:center; margin-top:18px; }
+  .step { display:flex; align-items:center; gap:9px; font-size:.86rem; font-weight:600; color:var(--muted); }
+  .step .dot { flex:none; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; border:1.5px solid var(--border); background:var(--card); color:var(--muted); }
+  .step.done { color:var(--ink); }
+  .step.done .dot { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .step.active { color:var(--ink); }
+  .step.active .dot { border-color:var(--accent); color:var(--accent); }
+  .step-line { flex:1; height:2px; background:var(--border); margin:0 10px; border-radius:2px; }
+  .step.done + .step-line { background:var(--accent); }
+
+  /* Filters */
+  .filters { display:flex; flex-wrap:wrap; gap:9px; margin:.5rem 0 1.1rem; }
+  .chip { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border:1px solid var(--border); border-radius:999px; background:var(--card); cursor:pointer; font:inherit; font-size:.86rem; font-weight:600; color:var(--ink); }
+  .chip:hover { border-color:var(--accent); }
+  .chip .cdot { width:7px; height:7px; border-radius:50%; }
+  .chip .cnt { color:var(--muted); font-weight:600; }
+  .chip.active { background:var(--accent-dark); border-color:var(--accent-dark); color:#fff; }
+  .chip.active .cnt { color:#c9d8cf; }
+  .chip.refresh { padding:8px 11px; color:var(--muted); }
+
+  /* Run rows */
+  .run { display:flex; align-items:center; gap:14px; border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin-top:10px; cursor:pointer; transition:border-color .15s; }
+  .run:hover { border-color:var(--accent); }
+  .avatar { flex:none; width:40px; height:40px; border-radius:10px; background:var(--panel); color:var(--muted); display:inline-flex; align-items:center; justify-content:center; font-weight:700; overflow:hidden; }
+  .avatar img { width:100%; height:100%; object-fit:cover; }
+  .run-main { flex:1; min-width:0; }
+  .run-title { font-weight:700; }
+  .run-title .dt { color:var(--muted); font-weight:500; font-size:.85rem; }
+  .run-meta { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.74rem; color:var(--muted); margin-top:3px; }
+  .status-pill { flex:none; display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:999px; font-size:.76rem; font-weight:600; background:var(--panel); }
+  .status-pill .sdot { width:6px; height:6px; border-radius:50%; }
+  .empty { color:var(--muted); font-size:.9rem; padding:10px 2px; }
+
+  /* Review draft */
+  textarea { width:100%; min-height:360px; border:1px solid var(--border); border-radius:12px; padding:12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; background:var(--card); resize:vertical; }
+  textarea:focus { outline:2px solid var(--accent); border-color:transparent; }
+  label { display:block; font-size:.78rem; color:var(--muted); margin:.9rem 0 .3rem; }
+  input[type=text], input[type=password], #reviewer { font:inherit; border:1px solid var(--border); border-radius:10px; padding:10px 12px; width:100%; max-width:420px; background:var(--card); }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .btn-row { display:flex; gap:10px; margin-top:14px; }
+  button.act { font:inherit; cursor:pointer; border:1px solid var(--border); background:var(--card); border-radius:10px; padding:10px 18px; font-weight:600; }
+  button.act.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.act.danger { color:var(--red); border-color:var(--red); background:var(--card); }
+  button.act:disabled { opacity:.55; cursor:progress; }
+  .msg { font-size:.86rem; margin-top:12px; line-height:1.5; white-space:pre-wrap; }
+  .msg.ok { color:#15803d; } .msg.err { color:var(--red); } .msg.warn { color:var(--amber); } .msg.info { color:var(--accent); }
+
+  .spin { display:inline-block; width:13px; height:13px; border:2px solid rgba(31,75,58,.25); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  .mini-spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(31,75,58,.25); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width:640px) {
+    .page-head { flex-direction:column; }
+    .page-head h1 { font-size:2.1rem; }
+    .steps { flex-wrap:wrap; gap:10px 0; }
+    .step-line { min-width:16px; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>Policy ingestion — review</h1>
-  <p class="meta">Upload a brochure, review the extracted draft, approve to publish.
-     Nothing goes live without approval.</p>
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        Human-in-the-loop
+      </p>
+      <h1>Policy ingestion</h1>
+      <p class="sub">Drop a brochure, review the extracted draft, approve to publish. Nothing goes live without you.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="num" id="stat-pending">–</span><span class="lbl">Pending</span></div>
+      <div class="stat"><span class="num" id="stat-live">–</span><span class="lbl">Live</span></div>
+    </div>
+  </header>
 
-  <section id="token-bar" style="display:none">
-    <h2>Admin token</h2>
-    <p class="meta">This service requires the <code>ADMIN_TOKEN</code> — paste it once per browser session.</p>
-    <div class="row">
-      <input id="token-input" type="password" placeholder="ADMIN_TOKEN" autocomplete="off"
-             style="max-width:420px" />
-      <button class="primary" id="token-save">Save</button>
+  <section class="card" id="token-bar" style="display:none">
+    <div class="card-head"><h2>Admin token</h2></div>
+    <p class="sub">This service requires the <code>ADMIN_TOKEN</code> — paste it once per browser session.</p>
+    <div class="btn-row" style="align-items:center">
+      <input id="token-input" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" />
+      <button class="act primary" id="token-save">Save</button>
     </div>
     <div class="msg" id="token-msg"></div>
   </section>
 
-  <section>
-    <h2>1 · Upload a document</h2>
-    <p class="meta">Just drop an insurance document — the AI detects the insurer and
-       type, rejects anything that isn't insurance-related, and redacts personal
-       information before extraction.</p>
-    <form id="upload-form">
-      <label>Document (PDF, .txt, .md)</label>
-      <input type="file" id="file" required accept=".pdf,.txt,.md" />
-      <div style="margin-top:12px">
-        <button class="primary" type="submit" id="upload-btn">Upload</button>
+  <section class="card">
+    <div class="card-head"><span class="step-badge">1</span><h2>Upload a document</h2></div>
+    <p class="sub">Drop any insurance document — the AI detects the insurer and type, rejects anything that isn't insurance-related, and redacts personal information before extraction.</p>
+
+    <div class="dropzone" id="dropzone">
+      <span class="dz-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7 9m5-5l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </span>
+      <div>
+        <strong>Drop a file here, or <a href="#" id="browse">browse</a></strong>
+        <div class="meta">PDF, .txt, or .md · up to 25 MB</div>
       </div>
-      <div class="msg" id="upload-msg"></div>
-    </form>
+      <input type="file" id="file" accept=".pdf,.txt,.md" hidden />
+    </div>
+
+    <div class="upload-card" id="upload-progress" style="display:none">
+      <div class="uc-top">
+        <span class="file-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>
+        <div class="run-main"><div class="uc-name" id="up-name"></div><div class="uc-sub" id="up-sub"></div></div>
+        <span class="pill work" id="up-pill"></span>
+      </div>
+      <div class="steps" id="up-steps"></div>
+    </div>
+
+    <div class="msg" id="upload-msg"></div>
+    <p class="note">Extraction runs server-side — you can leave this page and come back to the queue.</p>
   </section>
 
-  <section id="queue-section" style="display:none">
-    <h2>2 · Review queue</h2>
-    <p class="meta">New uploads open automatically in step 3 below — these tabs are for
-       coming back to earlier runs.</p>
-    <div class="row tabs" id="tabs">
-      <button data-status="queued">queued</button>
-      <button data-status="processing">processing</button>
-      <button data-status="pending_review" class="active">pending review</button>
-      <button data-status="extraction_skipped">extraction skipped</button>
-      <button data-status="extraction_failed">extraction failed</button>
-      <button data-status="failed">failed</button>
-      <button data-status="rejected_invalid">not insurance</button>
-      <button id="refresh" title="refresh">↻</button>
-    </div>
+  <section class="card" id="queue-section" style="display:none">
+    <div class="card-head"><span class="step-badge">2</span><h2>Review queue</h2></div>
+    <p class="sub">New uploads open automatically for review below — these filters are for returning to earlier runs.</p>
+    <div class="filters" id="tabs"></div>
     <div id="queue"></div>
   </section>
 
-  <section id="detail" style="display:none">
-    <h2>3 · Review draft <span class="meta" id="detail-meta"></span></h2>
-    <p class="meta">Edit the draft JSON below — confirm <code>insurer_name</code> matches the
-       document (new insurers are created automatically on publish). Validated against the
-       policy schema on approve; coverage must match the product line; amounts are PHP.
-       <a id="doc-link" target="_blank">Open the source document</a></p>
+  <section class="card" id="detail" style="display:none">
+    <div class="card-head"><span class="step-badge">3</span><h2>Review draft</h2></div>
+    <p class="sub" id="detail-meta"></p>
+    <p class="sub">Edit the draft JSON — confirm <code>insurer_name</code> matches the document (new insurers are created on publish). Validated on approve; coverage must match the product line; amounts are PHP. <a id="doc-link" target="_blank">Open the source document ↗</a></p>
     <textarea id="draft"></textarea>
     <label>Reviewed by</label>
-    <input id="reviewer" value="reviewer" />
-    <div style="margin-top:12px">
-      <button class="primary" id="approve">Approve &amp; publish</button>
-      <button class="danger" id="reject">Reject</button>
+    <input type="text" id="reviewer" value="reviewer" />
+    <div class="btn-row">
+      <button class="act primary" id="approve">Approve &amp; publish</button>
+      <button class="act danger" id="reject">Reject</button>
     </div>
     <div class="msg" id="detail-msg"></div>
   </section>
@@ -103,236 +193,255 @@
 <script>
 const state = { status: "pending_review", runId: null };
 const $ = (id) => document.getElementById(id);
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function syncTabs() {
-  document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
-    b.classList.toggle("active", b.dataset.status === state.status));
-}
-
-// Upload is async: the server enqueues the run and returns immediately; a
-// separate worker parses + extracts (so slow/OCR parses never hit a proxy
-// timeout). Poll until the run leaves the queue ('queued' -> 'processing' -> done).
+// status → {label, color} for filter chips + run-row status pills
+const STATUS = {
+  queued:            { label:"Queued",             color:"var(--blue)"  },
+  processing:        { label:"Processing",          color:"var(--amber)" },
+  pending_review:    { label:"Pending review",      color:"var(--accent)"},
+  extraction_skipped:{ label:"Extraction skipped",  color:"var(--gray)"  },
+  extraction_failed: { label:"Extraction failed",   color:"var(--red)"   },
+  failed:            { label:"Failed",              color:"var(--red)"   },
+  rejected_invalid:  { label:"Not insurance",       color:"var(--gray)"  },
+};
+const FILTER_ORDER = ["queued","processing","pending_review","extraction_skipped","extraction_failed","failed","rejected_invalid"];
 const IN_FLIGHT = new Set(["queued", "processing"]);
-async function pollRun(runId, onTick) {
-  const start = Date.now();
-  for (;;) {
-    const run = await api(`/reviews/${runId}`);
-    if (!IN_FLIGHT.has(run.status)) return run;
-    if (onTick) onTick(Math.round((Date.now() - start) / 1000));
-    await sleep(2000);
-  }
-}
+let counts = {};
 
-function adminToken() {
-  return sessionStorage.getItem("admin_token") ?? "";
+/* ---------- auth ---------- */
+function adminToken() { return sessionStorage.getItem("admin_token") ?? ""; }
+function withToken(url) {
+  const t = adminToken();
+  return t ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(t)}` : url;
 }
-
 function showTokenBar(message) {
-  // Inline token entry — window.prompt() is blocked in some browsers/webviews.
   $("token-bar").style.display = "block";
-  if (message) {
-    $("token-msg").className = "msg warn";
-    $("token-msg").textContent = message;
-  }
+  if (message) { $("token-msg").className = "msg warn"; $("token-msg").textContent = message; }
   $("token-input").focus();
 }
-
-function withToken(url) {
-  const token = adminToken();
-  return token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url;
-}
-
-const DRAFT_TEMPLATE = {
-  name: "", insurer_name: "", product_line: "travel",
-  summary: "",
-  premium_min: null, premium_max: null, premium_frequency: "single",
-  eligibility: { age_min: null, age_max: null },
-  coverage: { line: "travel", medical_limit: null, trip_cancellation_limit: null,
-              covid_covered: null, schengen_compliant: null, destinations: null,
-              max_trip_days: null },
-  exclusions: [], riders: [],
-};
-
 async function api(path, options = {}) {
   options.headers = { ...(options.headers ?? {}) };
   if (adminToken()) options.headers["authorization"] = `Bearer ${adminToken()}`;
   const response = await fetch(path, options);
-  if (response.status === 401) {
-    showTokenBar("Enter your admin token above and Save, then try again.");
-    throw new Error("Admin token required.");
-  }
+  if (response.status === 401) { showTokenBar("Enter your admin token above and Save, then try again."); throw new Error("Admin token required."); }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(JSON.stringify(body.detail ?? body, null, 2));
   return body;
 }
+function saveToken() {
+  const value = $("token-input").value.trim();
+  if (!value) return;
+  sessionStorage.setItem("admin_token", value);
+  $("token-input").value = "";
+  $("token-bar").style.display = "none";
+  init();
+}
+$("token-save").addEventListener("click", saveToken);
+$("token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveToken(); });
 
-function showQueue() {
-  $("queue-section").style.display = "block";
+/* ---------- dashboard stats + filters ---------- */
+async function loadStats() {
+  try {
+    const s = await api("/stats");
+    counts = s.by_status || {};
+    $("stat-pending").textContent = counts.pending_review ?? 0;
+    $("stat-live").textContent = s.live ?? 0;
+    renderFilters();
+  } catch { /* stats are non-critical */ }
+}
+function renderFilters() {
+  $("tabs").innerHTML = FILTER_ORDER.map((st) => `
+    <button class="chip ${st === state.status ? "active" : ""}" data-status="${st}">
+      <span class="cdot" style="background:${STATUS[st].color}"></span>${STATUS[st].label}
+      <span class="cnt">${counts[st] ?? 0}</span>
+    </button>`).join("") +
+    `<button class="chip refresh" id="refresh" title="Refresh">↻</button>`;
 }
 
+/* ---------- queue ---------- */
+function showQueue() { $("queue-section").style.display = "block"; }
+
 async function revealQueueIfAnyRuns() {
-  // Progressive disclosure: a fresh page is just step 1; the queue appears
-  // only when there is actually something to review (or after an upload).
-  const statuses = ["queued", "processing", "pending_review", "extraction_skipped",
-                    "extraction_failed", "failed", "rejected_invalid"];
-  for (const status of statuses) {
-    const runs = await api(`/reviews?status=${status}`);
-    if (runs.length) {
-      state.status = status;
-      syncTabs();
-      showQueue();
-      await loadQueue();
-      return;
-    }
-  }
+  await loadStats();
+  const first = FILTER_ORDER.find((st) => (counts[st] ?? 0) > 0);
+  if (first) { state.status = first; renderFilters(); showQueue(); await loadQueue(); }
 }
 
 async function loadQueue() {
   const runs = await api(`/reviews?status=${state.status}`);
   $("queue").innerHTML = runs.length
-    ? runs.map((r) => `
-        <div class="item" onclick="openRun('${r.id}')">
-          <strong>${r.insurer_name ?? "(insurer from document)"}</strong> · ${r.doc_type}
-          <div class="meta">run ${r.id} · model ${r.model} · ${r.created_at ?? ""}</div>
-        </div>`).join("")
-    : `<p class="meta">Nothing with status “${state.status}”.</p>`;
+    ? runs.map(runRow).join("")
+    : `<p class="empty">Nothing with status “${STATUS[state.status]?.label ?? state.status}”.</p>`;
 }
+function runRow(r) {
+  const s = STATUS[r.status] || { label:r.status, color:"var(--gray)" };
+  const ts = r.created_at ? String(r.created_at).replace("T", " ").slice(0, 16) : "";
+  const cover = r.slug ? "" : ""; // reserved
+  return `
+    <div class="run" onclick="openRun('${r.id}')">
+      <span class="avatar">?</span>
+      <div class="run-main">
+        <div class="run-title">${escapeHtml(r.insurer_name ?? "(insurer from document)")} <span class="dt">· ${escapeHtml(r.doc_type ?? "—")}</span></div>
+        <div class="run-meta">run ${r.id.slice(0, 13)} · model ${escapeHtml(r.model ?? "pending")}${ts ? " · " + ts : ""}</div>
+      </div>
+      <span class="status-pill"><span class="sdot" style="background:${s.color}"></span>${s.label}</span>
+    </div>`;
+}
+function escapeHtml(v) { return String(v).replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c])); }
+
+/* ---------- upload (drop-and-go) with a real step tracker ---------- */
+const STEPS = ["Classify", "Redact PII", "Extract fields", "Draft"];
+function phaseFor(run) {
+  // Honest, from what the run actually exposes: queued = nothing yet; processing
+  // with a parse_status means parse+intake (classify/redact) finished and
+  // extraction is running; terminal means the draft is ready.
+  if (!run || run.status === "queued") return { done: 0, active: -1 };
+  if (run.status === "processing") return run.parse_status ? { done: 2, active: 2 } : { done: 0, active: 0 };
+  return { done: 4, active: -1 };
+}
+function renderSteps(run) {
+  const { done, active } = phaseFor(run);
+  $("up-steps").innerHTML = STEPS.map((label, i) => {
+    const cls = i < done ? "done" : i === active ? "active" : "";
+    const mark = i < done ? "✓" : i === active ? '<span class="mini-spin"></span>' : (i + 1);
+    return `<div class="step ${cls}"><span class="dot">${mark}</span>${label}</div>`;
+  }).join('<span class="step-line"></span>');
+}
+function setPill(cls, html) { const p = $("up-pill"); p.className = `pill ${cls}`; p.innerHTML = html; }
+
+async function pollRun(runId, onTick) {
+  const start = Date.now();
+  for (;;) {
+    const run = await api(`/reviews/${runId}`);
+    if (!IN_FLIGHT.has(run.status)) return run;
+    if (onTick) onTick(Math.round((Date.now() - start) / 1000), run);
+    await sleep(2000);
+  }
+}
+
+async function startUpload(file) {
+  if (!file) return;
+  const msg = $("upload-msg");
+  $("upload-progress").style.display = "block";
+  $("up-name").textContent = file.name;
+  $("up-sub").textContent = `${(file.size / 1e6).toFixed(1)} MB · uploading…`;
+  setPill("work", '<span class="spin"></span>Uploading');
+  renderSteps({ status: "queued" });
+  msg.className = "msg"; msg.textContent = "";
+
+  const data = new FormData();
+  data.append("file", file);
+  try {
+    const result = await api("/documents", { method: "POST", body: data });
+    showQueue(); state.status = "queued";
+    await loadStats(); await loadQueue();
+    $("up-sub").textContent = `${(file.size / 1e6).toFixed(1)} MB · parsing & extracting…`;
+
+    const run = await pollRun(result.extraction_run_id, (secs, run) => {
+      setPill("work", `<span class="spin"></span>Working · ${secs}s`);
+      renderSteps(run);
+    });
+    renderSteps(run);
+
+    if (run.status === "rejected_invalid") {
+      setPill("err", "Not insurance");
+      msg.className = "msg err";
+      msg.textContent = "Not a valid document — only insurance-related documents are accepted.\n" +
+        ((run.output && run.output.reason) || "The AI didn't recognize this as an insurance document.");
+    } else if (run.status === "failed") {
+      setPill("err", "Failed");
+      msg.className = "msg err";
+      msg.textContent = "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
+        "\nFix the cause and re-upload the same file to retry.";
+    } else {
+      setPill("done", "✓ Ready");
+      msg.className = "msg ok";
+      msg.textContent = `Done — status: ${STATUS[run.status]?.label ?? run.status}. Opened for review below.`;
+    }
+    state.status = run.status;
+    await loadStats(); renderFilters(); await loadQueue();
+    if (run.status !== "failed" && run.status !== "rejected_invalid") await openRun(result.extraction_run_id);
+  } catch (error) {
+    setPill("err", "Error");
+    msg.className = "msg err"; msg.textContent = error.message;
+  }
+}
+
+$("dropzone").addEventListener("click", (e) => { if (e.target.id !== "browse") $("file").click(); });
+$("browse").addEventListener("click", (e) => { e.preventDefault(); $("file").click(); });
+$("file").addEventListener("change", () => startUpload($("file").files[0]));
+["dragover", "dragenter"].forEach((ev) => $("dropzone").addEventListener(ev, (e) => { e.preventDefault(); $("dropzone").classList.add("drag"); }));
+["dragleave", "dragend"].forEach((ev) => $("dropzone").addEventListener(ev, () => $("dropzone").classList.remove("drag")));
+$("dropzone").addEventListener("drop", (e) => { e.preventDefault(); $("dropzone").classList.remove("drag"); startUpload(e.dataTransfer.files[0]); });
+
+/* ---------- filters ---------- */
+$("tabs").addEventListener("click", async (event) => {
+  if (event.target.id === "refresh" || event.target.closest("#refresh")) { await loadStats(); await loadQueue(); return; }
+  const chip = event.target.closest("[data-status]");
+  if (!chip) return;
+  state.status = chip.dataset.status;
+  renderFilters();
+  await loadQueue();
+});
+
+/* ---------- review draft ---------- */
+const DRAFT_TEMPLATE = {
+  name: "", insurer_name: "", product_line: "travel", summary: "",
+  premium_min: null, premium_max: null, premium_frequency: "single",
+  eligibility: { age_min: null, age_max: null },
+  coverage: { line: "travel", medical_limit: null, trip_cancellation_limit: null,
+              covid_covered: null, schengen_compliant: null, destinations: null, max_trip_days: null },
+  exclusions: [], riders: [],
+};
 
 async function openRun(runId) {
   state.runId = runId;
   const run = await api(`/reviews/${runId}`);
   const output = run.output ?? {};
-  $("detail").style.display = "block";
   const msg = $("detail-msg");
+  $("detail").style.display = "block";
 
   if (IN_FLIGHT.has(run.status)) {
-    $("detail-meta").textContent = `· run ${runId} · ${run.status}`;
+    $("detail-meta").textContent = `run ${runId} · ${STATUS[run.status]?.label ?? run.status}`;
     $("draft").value = "";
-    msg.className = "msg";
+    msg.className = "msg info";
     msg.textContent = run.status === "queued"
-      ? "Queued — the worker will parse and extract this shortly. Refresh in a moment."
-      : "Parsing and extracting this upload — refresh the queue in a moment.";
+      ? "Queued — the worker will parse and extract this shortly."
+      : "Parsing and extracting this upload — it'll open here when the draft is ready.";
     $("detail").scrollIntoView({ behavior: "smooth" });
     return;
   }
-
   if (run.status === "rejected_invalid") {
-    $("detail-meta").textContent = `· run ${runId} · rejected (not insurance)`;
+    $("detail-meta").textContent = `run ${runId} · rejected (not insurance)`;
     $("draft").value = "";
     msg.className = "msg err";
-    msg.textContent =
-      "Rejected — not an insurance document.\n" +
+    msg.textContent = "Rejected — not an insurance document.\n" +
       ((output && output.reason) || "Only insurance-related documents are accepted.");
     $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
-    $("detail").style.display = "block";
     $("detail").scrollIntoView({ behavior: "smooth" });
     return;
   }
 
   const draft = output.name ? output : structuredClone(DRAFT_TEMPLATE);
   if (output.raw_text && !output.name) draft._raw_text_excerpt = output.raw_text.slice(0, 2000);
-  // insurer_name is required on approve; if the extractor left it null but the
-  // run has a detected insurer, pre-fill it so the reviewer can just confirm.
   if (!draft.insurer_name && run.insurer_name) draft.insurer_name = run.insurer_name;
   $("draft").value = JSON.stringify(draft, null, 2);
   $("detail-meta").textContent =
-    `· run ${runId} · ${run.insurer_name ?? "insurer taken from the draft below"}` +
+    `run ${runId} · ${run.insurer_name ?? "insurer from the draft below"}` +
     (run.parse_status ? ` · ${run.parse_status}` : "");
   $("doc-link").href = withToken(`/documents/${run.source_document_id}/file`);
+
   if (run.status === "failed" || output.error) {
     msg.className = "msg err";
-    msg.textContent =
-      `${run.status === "failed" ? "Parsing/extraction" : "Extraction"} failed — ` +
-      `draft below is an empty template.\n${output.error ?? ""}\n` +
-      "Fix the cause (bad file / model name / API key) and re-upload the same file to retry.";
+    msg.textContent = `${run.status === "failed" ? "Parsing/extraction" : "Extraction"} failed — draft below is an empty template.\n${output.error ?? ""}\nFix the cause (bad file / model name / API key) and re-upload the same file to retry.`;
   } else if (run.status === "extraction_skipped") {
     msg.className = "msg warn";
-    msg.textContent =
-      "No LLM key configured, so extraction was skipped — the LLM never ran and " +
-      "the draft below is a blank template. Fill it in from the source document " +
-      "(shown one click away), or set OPENAI_API_KEY / ANTHROPIC_API_KEY for the " +
-      "ingestion service and re-upload the same file to auto-extract.";
-  } else {
-    msg.className = "msg";
-    msg.textContent = "";
-  }
-  $("detail").style.display = "block";
+    msg.textContent = "No LLM key configured, so extraction was skipped — the draft below is a blank template. Fill it in from the source document (one click away), or set OPENAI_API_KEY / ANTHROPIC_API_KEY for the ingestion service and re-upload.";
+  } else { msg.className = "msg"; msg.textContent = ""; }
   $("detail").scrollIntoView({ behavior: "smooth" });
 }
 
-$("upload-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const data = new FormData();
-  data.append("file", $("file").files[0]);  // insurer + type are detected by the AI
-  const msg = $("upload-msg");
-  const btn = $("upload-btn");
-
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span>Working…`;
-  msg.className = "msg";
-  msg.textContent = "Uploading…";
-
-  try {
-    const result = await api("/documents", { method: "POST", body: data });
-    // Server enqueued the file; the worker parses + extracts in the background.
-    showQueue();
-    state.status = "queued";
-    syncTabs();
-    await loadQueue();
-    msg.className = "msg";
-    msg.textContent =
-      "Queued — the worker is parsing and extracting. Large or scanned PDFs can " +
-      "take a while; it runs server-side even if you leave this page." +
-      (result.document_reused ? "\nSame file as an earlier upload — re-extracted as a fresh run." : "");
-
-    const run = await pollRun(result.extraction_run_id, (secs) => {
-      msg.textContent =
-        `Parsing and extracting… (${secs}s). Large or scanned PDFs take longer; ` +
-        "it runs server-side even if you leave this page.";
-    });
-
-    if (run.status === "rejected_invalid") {
-      msg.className = "msg err";
-      msg.textContent =
-        "Not a valid document — only insurance-related documents are accepted.\n" +
-        ((run.output && run.output.reason) || "The AI didn't recognize this as an insurance document.");
-      state.status = "rejected_invalid";
-    } else if (run.status === "failed") {
-      msg.className = "msg err";
-      msg.textContent =
-        "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
-        "\nFix the cause and re-upload the same file to retry.";
-      state.status = "failed";
-    } else {
-      msg.className = "msg ok";
-      msg.textContent = `Done — status: ${run.status}. Opening it for review below…`;
-      state.status = run.status;
-    }
-    syncTabs();
-    await loadQueue();
-    if (run.status !== "failed" && run.status !== "rejected_invalid")
-      await openRun(result.extraction_run_id);
-  } catch (error) {
-    msg.className = "msg err";
-    msg.textContent = error.message;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = "Upload";
-  }
-});
-
-$("tabs").addEventListener("click", async (event) => {
-  const status = event.target.dataset?.status;
-  if (!status) return;
-  state.status = status;
-  document.querySelectorAll("#tabs button[data-status]").forEach((b) =>
-    b.classList.toggle("active", b === event.target));
-  await loadQueue();
-});
-$("refresh").addEventListener("click", loadQueue);
-
-// Turn a Pydantic 422 (JSON array of {loc,msg}) into a readable field list.
 function friendlyError(message) {
   try {
     const errors = JSON.parse(message);
@@ -343,7 +452,7 @@ function friendlyError(message) {
       });
       return "Fix these fields in the draft, then approve again:\n" + lines.join("\n");
     }
-  } catch { /* not a validation array — show as-is */ }
+  } catch { /* not a validation array */ }
   return message;
 }
 
@@ -353,30 +462,28 @@ $("approve").addEventListener("click", async () => {
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Approving…";
-  msg.className = "msg";
+  msg.className = "msg info";
   msg.textContent = "Approving… if the draft doesn't validate, the document is re-checked automatically (up to 3×) — this can take a moment.";
   try {
     const draft = JSON.parse($("draft").value);
     delete draft._raw_text_excerpt;
     const result = await api(`/reviews/${state.runId}/approve`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ draft, reviewed_by: $("reviewer").value }),
     });
     if (result.status === "corrected") {
-      // Auto-repair pass: load the corrected draft and ask for approval again.
       $("draft").value = JSON.stringify(result.draft, null, 2);
       const fields = (result.errors || [])
         .map((e) => (e.loc || []).filter((x) => x !== "body" && x !== "draft").join("."))
         .filter(Boolean).join(", ");
-      msg.className = "msg";
+      msg.className = "msg info";
       msg.textContent = `Auto-corrected (attempt ${result.attempt}/${result.max_attempts}) — re-read the document and fixed: ${fields || "the flagged fields"}. Review the updated draft and approve again.`;
       return;
     }
     msg.className = "msg ok";
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
-    await loadQueue();
+    await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
   finally { btn.disabled = false; btn.textContent = label; }
 });
@@ -385,31 +492,21 @@ $("reject").addEventListener("click", async () => {
   const msg = $("detail-msg");
   try {
     await api(`/reviews/${state.runId}/reject`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ reviewed_by: $("reviewer").value }),
     });
     msg.className = "msg ok"; msg.textContent = "Rejected.";
     $("detail").style.display = "none";
-    await loadQueue();
+    await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });
 
-function saveToken() {
-  const value = $("token-input").value.trim();
-  if (!value) return;
-  sessionStorage.setItem("admin_token", value);
-  $("token-input").value = "";
-  $("token-bar").style.display = "none";
-  init();  // retry now that we have a token
-}
-$("token-save").addEventListener("click", saveToken);
-$("token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") saveToken(); });
-
+/* ---------- boot ---------- */
 function init() {
+  renderFilters();
   revealQueueIfAnyRuns().catch((error) => {
     showQueue();
-    $("queue").innerHTML = `<p class="msg err">${error.message}</p>`;
+    $("queue").innerHTML = `<p class="msg err">${escapeHtml(error.message)}</p>`;
   });
 }
 init();

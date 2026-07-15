@@ -283,6 +283,22 @@ def store_corrected_draft(run_id: str, draft: dict[str, Any]) -> None:
         )
 
 
+def review_stats() -> dict[str, Any]:
+    """Counts for the reviewer dashboard: published policies (LIVE) and a
+    breakdown of extraction runs by status (drives the queue filter counts)."""
+    with get_engine().connect() as conn:
+        by_status = {
+            row[0]: int(row[1])
+            for row in conn.execute(
+                text("SELECT status, count(*) FROM catalog.extraction_runs GROUP BY status")
+            )
+        }
+        live = conn.execute(
+            text("SELECT count(*) FROM catalog.policies WHERE status = 'published'")
+        ).scalar_one()
+    return {"live": int(live), "by_status": by_status}
+
+
 def get_published_source_document(slug: str) -> dict[str, Any] | None:
     """The source document behind a published policy's current version, for the
     public brochure/document endpoints. Returns file_ref + doc_type, or None if
