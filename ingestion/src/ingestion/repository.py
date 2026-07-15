@@ -251,6 +251,7 @@ def get_review(run_id: str) -> dict[str, Any] | None:
     sql = text(
         """
         SELECT r.id, r.status, r.model, r.output, r.source_document_id,
+               r.correction_attempts,
                d.insurer_id, d.file_ref, d.parse_status, d.doc_type,
                i.slug AS insurer_slug, i.name AS insurer_name
         FROM catalog.extraction_runs r
@@ -262,6 +263,24 @@ def get_review(run_id: str) -> dict[str, Any] | None:
     with get_engine().connect() as conn:
         row = conn.execute(sql, {"id": run_id}).first()
         return dict(row._mapping) if row else None
+
+
+def store_corrected_draft(run_id: str, draft: dict[str, Any]) -> None:
+    """Replace a run's draft with an auto-corrected one and count the attempt.
+    The run stays pending_review so the human approves the corrected draft."""
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE catalog.extraction_runs
+                SET output = CAST(:output AS jsonb),
+                    correction_attempts = correction_attempts + 1,
+                    status = 'pending_review'
+                WHERE id = :id
+                """
+            ),
+            {"output": json.dumps(draft), "id": run_id},
+        )
 
 
 def get_published_source_document(slug: str) -> dict[str, Any] | None:

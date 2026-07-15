@@ -10,11 +10,12 @@ import os
 from pathlib import Path
 from typing import Annotated
 
+import anyio
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-from ingestion import parsing, preview, repository
+from ingestion import correction, parsing, preview, repository
 from ingestion.prompts import PolicyDraft
 
 
@@ -110,19 +111,68 @@ def review_detail(run_id: str, _auth: Protected = None) -> dict:
 
 
 class ApprovalRequest(BaseModel):
-    draft: PolicyDraft  # reviewer-corrected draft (validated against the schema)
+    # Raw dict, not PolicyDraft: we validate it inside the handler so a failure
+    # can trigger an auto-correction pass instead of a dead-end 422.
+    draft: dict
     reviewed_by: str = Field(default="reviewer", max_length=120)
 
 
+def _draft_errors(error: ValidationError) -> list[dict]:
+    """JSON-safe {loc, msg} list (pydantic's ctx can hold non-serializable
+    ValueError objects) — matches what the admin UI's friendlyError renders."""
+    return [{"loc": list(item["loc"]), "msg": item["msg"]} for item in error.errors()]
+
+
 @app.post("/reviews/{run_id}/approve")
-def approve(run_id: str, request: ApprovalRequest, _auth: Protected = None) -> dict:
+async def approve(run_id: str, request: ApprovalRequest, _auth: Protected = None) -> dict:
+    review = await anyio.to_thread.run_sync(repository.get_review, run_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="review not found")
+
     try:
-        published = repository.publish(
-            run_id, request.draft.model_dump(mode="json"), request.reviewed_by
-        )
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail="review not found") from error
+        draft = PolicyDraft.model_validate(request.draft)
+    except ValidationError as error:
+        return await _auto_correct_or_fail(run_id, review, request.draft, error)
+
+    published = await anyio.to_thread.run_sync(
+        repository.publish, run_id, draft.model_dump(mode="json"), request.reviewed_by
+    )
     return {"published": published}
+
+
+async def _auto_correct_or_fail(
+    run_id: str, review: dict, raw: dict, error: ValidationError
+) -> dict:
+    """A draft failed validation on approve. If the large model + document are
+    available and we're under the attempt cap, re-read the document visually with
+    the error, store the corrected draft, and hand it back for another human
+    approval. Otherwise surface the error for a manual fix."""
+    fields = _draft_errors(error)
+    attempts = review.get("correction_attempts") or 0
+    file_ref = review.get("file_ref")
+    can_correct = (
+        attempts < correction.MAX_CORRECTION_ATTEMPTS
+        and correction.correction_enabled()
+        and file_ref
+        and Path(file_ref).exists()
+    )
+    if not can_correct:
+        raise HTTPException(status_code=422, detail=fields)
+
+    data = await anyio.to_thread.run_sync(Path(file_ref).read_bytes)
+    errors_text = "\n".join(f"- {'.'.join(map(str, f['loc']))}: {f['msg']}" for f in fields)
+    corrected = await correction.correct_draft(data, raw, errors_text)
+    if corrected is None:
+        raise HTTPException(status_code=422, detail=fields)
+
+    await anyio.to_thread.run_sync(repository.store_corrected_draft, run_id, corrected)
+    return {
+        "status": "corrected",
+        "attempt": attempts + 1,
+        "max_attempts": correction.MAX_CORRECTION_ATTEMPTS,
+        "draft": corrected,
+        "errors": fields,
+    }
 
 
 class RejectionRequest(BaseModel):

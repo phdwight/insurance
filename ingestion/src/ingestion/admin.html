@@ -349,6 +349,12 @@ function friendlyError(message) {
 
 $("approve").addEventListener("click", async () => {
   const msg = $("detail-msg");
+  const btn = $("approve");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Approving…";
+  msg.className = "msg";
+  msg.textContent = "Approving… if the draft doesn't validate, the document is re-checked automatically (up to 3×) — this can take a moment.";
   try {
     const draft = JSON.parse($("draft").value);
     delete draft._raw_text_excerpt;
@@ -357,11 +363,22 @@ $("approve").addEventListener("click", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ draft, reviewed_by: $("reviewer").value }),
     });
+    if (result.status === "corrected") {
+      // Auto-repair pass: load the corrected draft and ask for approval again.
+      $("draft").value = JSON.stringify(result.draft, null, 2);
+      const fields = (result.errors || [])
+        .map((e) => (e.loc || []).filter((x) => x !== "body" && x !== "draft").join("."))
+        .filter(Boolean).join(", ");
+      msg.className = "msg";
+      msg.textContent = `Auto-corrected (attempt ${result.attempt}/${result.max_attempts}) — re-read the document and fixed: ${fields || "the flagged fields"}. Review the updated draft and approve again.`;
+      return;
+    }
     msg.className = "msg ok";
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
     await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
+  finally { btn.disabled = false; btn.textContent = label; }
 });
 
 $("reject").addEventListener("click", async () => {

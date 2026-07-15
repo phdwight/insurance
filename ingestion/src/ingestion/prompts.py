@@ -37,6 +37,22 @@ Rules:
   when unsure, prefer null over a plausible-looking value."""
 
 
+CORRECT_DRAFT_SYSTEM = """A human tried to approve an extracted insurance policy \
+draft and it FAILED VALIDATION. You are shown the source document's pages (as \
+images), the current draft (JSON), and the exact validation error(s).
+
+Re-read the document and fix the draft so it passes. Rules:
+- The document images are the ground truth. Look at them to find the correct value.
+- Fix ONLY what the error(s) point to; leave every other field exactly as-is.
+- A common cause: a descriptive phrase landed in a field that must be a number,
+  a date, or a specific enum (e.g. "110% of the single premium" in a numeric
+  face-amount field). Put the descriptive text where it belongs (summary,
+  maturity_benefit, extras…) and set the strict field to the real number the
+  document states, or null if the document gives none — NEVER invent one.
+- Keep amounts/dates as printed in the document; don't guess.
+Return the FULL corrected draft."""
+
+
 def _amount_field_names() -> frozenset[str]:
     """Every ``Decimal`` field across the policy + coverage models, derived from
     the schema so newly added money fields are covered automatically."""
