@@ -267,9 +267,12 @@ services:
     logging: *logging
     # Static nginx build. VITE_API_URL is rendered into /config.js at container
     # start, so the browser must be able to reach this URL — set it to the API's
-    # PUBLIC address on the target host.
+    # PUBLIC address on the target host. VITE_INGESTION_URL (optional) is the
+    # PUBLIC ingestion address; set it to show brochure cover images + document
+    # links in results. Leave it empty to keep the brochure feature off.
     environment:
       VITE_API_URL: ${VITE_API_URL:?VITE_API_URL must be the public API address}
+      VITE_INGESTION_URL: ${VITE_INGESTION_URL:-}
     ports:
       - "${PWA_PORT:-41500}:80"
     healthcheck:

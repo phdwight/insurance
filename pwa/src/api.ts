@@ -1,8 +1,9 @@
 declare global {
   interface Window {
-    // Injected at container start from $VITE_API_URL by pwa/docker-entrypoint.sh
-    // (see /config.js). Absent in local dev, where import.meta.env takes over.
-    __APP_CONFIG__?: { API_URL?: string };
+    // Injected at container start from $VITE_API_URL / $VITE_INGESTION_URL by
+    // pwa/docker-entrypoint.sh (see /config.js). Absent in local dev, where
+    // import.meta.env takes over.
+    __APP_CONFIG__?: { API_URL?: string; INGESTION_URL?: string };
   }
 }
 
@@ -10,6 +11,19 @@ const API =
   window.__APP_CONFIG__?.API_URL ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:8000";
+
+// Public ingestion base for brochure cover images + documents. Empty in prod
+// unless configured (feature stays off — cards just show the placeholder).
+const INGESTION =
+  window.__APP_CONFIG__?.INGESTION_URL ||
+  import.meta.env.VITE_INGESTION_URL ||
+  (import.meta.env.DEV ? "http://localhost:8003" : "");
+
+export const brochureImageUrl = (slug: string): string | null =>
+  INGESTION ? `${INGESTION}/policies/${slug}/brochure` : null;
+
+export const brochureDocUrl = (slug: string): string | null =>
+  INGESTION ? `${INGESTION}/policies/${slug}/document` : null;
 
 // crypto.randomUUID() only exists in a secure context (HTTPS or localhost), so
 // it throws over plain HTTP to a LAN IP (e.g. a NAS at http://192.168.x.x). Fall
@@ -43,10 +57,19 @@ export interface Recommendation {
   premium_frequency: string | null;
   currency: string;
   summary: string;
-  match_reasons: string[];
+  // Structured since the writer classifies each reason; strings still tolerated
+  // (older payloads / guided-mode fallbacks) and normalized in the UI.
+  match_reasons: (MatchReason | string)[];
+  match_strength?: "strong" | "partial";
   exclusions: string[];
   verified_at: string | null;
   source_url: string | null;
+  coverage?: Record<string, unknown> | null;
+}
+
+export interface MatchReason {
+  text: string;
+  kind: "match" | "gap";
 }
 
 export type Recommendations = Record<string, Recommendation[]>;

@@ -47,26 +47,45 @@ async def _judge_one(model_name: str, policy_facts: dict, claim: str) -> bool:
 
 
 async def verify_reasons(policy: dict[str, Any]) -> dict[str, Any]:
-    """Return the policy with only unanimously grounded reasons kept."""
+    """Return the policy with only unanimously grounded reasons kept.
+
+    Only positive "match" claims are grounded — an honest "gap" note ("no term
+    is specified") is not a coverage claim a judge could confirm and must never
+    be dropped, or a partial match would silently look strong."""
     reasons = policy.get("match_reasons", [])
     if not reasons:
         return policy
 
-    facts = {key: value for key, value in policy.items() if key != "match_reasons"}
+    facts = {
+        key: value
+        for key, value in policy.items()
+        if key not in ("match_reasons", "match_strength", "verification")
+    }
     models = judge_models()
 
-    async def check(reason: str) -> bool:
-        votes = await asyncio.gather(*(_judge_one(m, facts, reason) for m in models))
+    async def grounded(text: str) -> bool:
+        votes = await asyncio.gather(*(_judge_one(m, facts, text) for m in models))
         return all(votes)
 
-    keep_flags = await asyncio.gather(*(check(reason) for reason in reasons))
-    kept = [reason for reason, keep in zip(reasons, keep_flags, strict=True) if keep]
+    matches = [reason for reason in reasons if reason.get("kind") != "gap"]
+    keep_flags = await asyncio.gather(*(grounded(reason["text"]) for reason in matches))
 
-    policy["match_reasons"] = kept or [FALLBACK_REASON]
+    kept: list[dict[str, Any]] = []
+    match_index = 0
+    for reason in reasons:  # preserve original order; gaps always survive
+        if reason.get("kind") == "gap":
+            kept.append(reason)
+        else:
+            if keep_flags[match_index]:
+                kept.append(reason)
+            match_index += 1
+
+    dropped = len(matches) - sum(keep_flags)
+    policy["match_reasons"] = kept or [{"text": FALLBACK_REASON, "kind": "match"}]
     policy["verification"] = {
         "judges": models,
-        "reasons_checked": len(reasons),
-        "reasons_dropped": len(reasons) - len(kept),
+        "reasons_checked": len(matches),
+        "reasons_dropped": dropped,
     }
     return policy
 

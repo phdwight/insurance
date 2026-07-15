@@ -4,6 +4,8 @@ One place to review wording — for prompt tuning, for compliance review of
 user-facing text, and for future localization. Nothing here contains logic.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -29,6 +31,12 @@ user's needs. STRICT rules:
 - Use ONLY the facts in the provided policy JSON. Never invent coverage, \
 amounts, or terms.
 - 1-3 reasons per policy, each one sentence, each tied to a concrete field.
+- Classify each reason with a kind: "match" when the policy MEETS a criterion \
+the user asked about, or states a clearly positive fact; "gap" ONLY when a \
+criterion THE USER ASKED ABOUT (present in their profile) is missing or not \
+specified in the policy data. Do NOT flag fields the user never asked about \
+(e.g. premium when they didn't mention budget). Be honest — surface real gaps \
+as "gap", never dress them up as a match.
 - Mention relevant exclusions or limits honestly if they matter to the user."""
 
 JUDGE_SYSTEM = """You are a strict fact-checker for insurance policy explanations.
@@ -49,9 +57,17 @@ When unsure, answer ungrounded. Judge ONLY against the provided data."""
 # ---------------------------------------------------------------------------
 
 
+class MatchReason(BaseModel):
+    text: str
+    # "match": the policy meets a criterion the user asked about (or a clearly
+    # positive fact). "gap": a detail the user cares about is missing / not
+    # specified in the policy data — surfaced honestly, and marks a partial match.
+    kind: Literal["match", "gap"]
+
+
 class PolicyReasons(BaseModel):
     slug: str
-    reasons: list[str]
+    reasons: list[MatchReason]
 
 
 class ExplanationOutput(BaseModel):

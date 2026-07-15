@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { newSessionId, streamChat, type Question, type Recommendations } from "./api";
 import Chat, { type ChatMessage } from "./components/Chat";
 import Intake from "./components/Intake";
+import ResetButton from "./components/ResetButton";
 import Results from "./components/Results";
 import "./app.css";
 
@@ -61,11 +62,6 @@ export default function App() {
       <header className="topbar">
         <span className="brand">Safe Harbor</span>
         <div className="topbar-right">
-          {started && (
-            <button className="link" onClick={reset}>
-              Start over
-            </button>
-          )}
           <span className="licensed">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -97,8 +93,14 @@ export default function App() {
             busy={busy}
             done={done}
             onSend={(text) => void send(text)}
+            onReset={reset}
           />
           {recommendations && <Results recommendations={recommendations} />}
+          {done && (
+            <div className="reset-row">
+              <ResetButton onClick={reset} label className="reset-btn" />
+            </div>
+          )}
         </>
       )}
 

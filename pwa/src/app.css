@@ -82,13 +82,6 @@ button[type="submit"] {
   border-color: var(--accent);
 }
 
-button.link {
-  border: none;
-  background: none;
-  color: var(--accent);
-  padding: 4px;
-}
-
 /* Intake */
 .intake {
   min-height: calc(100dvh - 5.5rem);
@@ -330,7 +323,56 @@ button.link {
 }
 
 .bubble.thinking {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 16px;
+}
+
+.bubble.thinking .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: typing-bounce 1.2s infinite ease-in-out both;
+}
+
+.bubble.thinking .dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.bubble.thinking .dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Respect reduced-motion: pulse opacity instead of bouncing. */
+@media (prefers-reduced-motion: reduce) {
+  .bubble.thinking .dot {
+    animation: typing-fade 1.2s infinite ease-in-out both;
+  }
+  @keyframes typing-fade {
+    0%,
+    80%,
+    100% {
+      opacity: 0.3;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
 }
 
 .answer-chips {
@@ -373,6 +415,30 @@ button.link {
   border-color: transparent;
 }
 
+/* Start-over: icon-only in the composer row (matches input/Send height via the
+   flex row's default stretch), icon+label centered in the results view. */
+.composer-reset {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--accent);
+}
+
+.reset-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.75rem;
+}
+
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+}
+
 /* Results */
 .results section {
   margin-top: 2rem;
@@ -389,27 +455,117 @@ button.link {
 }
 
 .policy-card {
+  display: flex;
+  gap: 20px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 16px;
+  padding: 20px;
   text-align: left;
+}
+
+.policy-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.policy-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .policy-card h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
 }
 
 .policy-card .insurer {
-  margin: 2px 0 8px;
-  font-size: 0.8rem;
+  margin: 3px 0 0;
+  font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* Match badge */
+.match-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-size: 0.82rem;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.badge-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.match-badge.strong .badge-pill {
+  background: #e3f0e8;
+  color: var(--accent);
+}
+
+.match-badge.partial .badge-pill {
+  background: #f5ead2;
+  color: #8a6d1f;
+}
+
+.match-note {
+  color: var(--muted);
+}
+
+/* Stat row */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0 0 14px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.stat {
+  background: #f6f8f5;
+  padding: 12px 14px;
+}
+
+.stat dt {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stat dd {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.stat dd.muted {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .policy-card .premium {
   font-weight: 600;
-  margin: 0 0 8px;
+  margin: 0 0 12px;
 }
 
 .policy-card .freq {
@@ -418,14 +574,42 @@ button.link {
   font-size: 0.85rem;
 }
 
+/* Reasons with ✓ / ! markers */
 .reasons {
-  margin: 0 0 8px;
-  padding-left: 18px;
-  font-size: 0.88rem;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 0.9rem;
 }
 
 .reasons li {
-  margin-bottom: 3px;
+  display: flex;
+  gap: 9px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.reason-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.reasons li.ok .reason-icon {
+  background: #e3f0e8;
+  color: var(--accent);
+}
+
+.reasons li.gap .reason-icon {
+  background: #f5ead2;
+  color: #8a6d1f;
 }
 
 .exclusions {
@@ -437,8 +621,11 @@ button.link {
 .policy-card footer {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   font-size: 0.75rem;
   color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
 }
 
 .policy-card footer a {
@@ -451,12 +638,71 @@ button.link {
 }
 
 .compare-pick {
-  float: right;
-  font-size: 0.75rem;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
   color: var(--muted);
   display: flex;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
+  white-space: nowrap;
+}
+
+/* Brochure panel */
+.brochure {
+  flex: 0 0 168px;
+  align-self: stretch;
+  min-height: 224px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+a.brochure {
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition:
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+
+a.brochure:hover {
+  box-shadow: 0 6px 20px rgba(20, 40, 30, 0.14);
+  transform: translateY(-1px);
+}
+
+.brochure img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.brochure-empty {
+  flex-direction: column;
+  gap: 10px;
+  border: 1px dashed var(--border);
+  background: #f6f8f5;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 12px;
+}
+
+@media (max-width: 560px) {
+  .policy-card {
+    flex-direction: column-reverse;
+  }
+  .brochure {
+    flex-basis: auto;
+    min-height: 180px;
+  }
+  .stat-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .compare-btn {
@@ -499,11 +745,16 @@ button.link {
 }
 
 .build-stamp {
-  margin-top: 2.5rem;
-  padding-top: 1rem;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 0.45rem 1rem;
   border-top: 1px solid var(--border);
   text-align: center;
   color: var(--muted);
+  background: var(--bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.7rem;
   letter-spacing: 0.08em;

@@ -6,10 +6,11 @@
 set -eu
 
 : "${VITE_API_URL:=http://localhost:8000}"
+: "${VITE_INGESTION_URL:=}"  # public ingestion base for brochure images; empty = feature off
 target="/usr/share/nginx/html/config.js"
 
 cat > "$target" <<EOF
-window.__APP_CONFIG__ = { API_URL: "${VITE_API_URL}" };
+window.__APP_CONFIG__ = { API_URL: "${VITE_API_URL}", INGESTION_URL: "${VITE_INGESTION_URL}" };
 EOF
 
-echo "[pwa] rendered ${target} -> API_URL=${VITE_API_URL}"
+echo "[pwa] rendered ${target} -> API_URL=${VITE_API_URL} INGESTION_URL=${VITE_INGESTION_URL}"

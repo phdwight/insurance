@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Question } from "../api";
+import ResetButton from "./ResetButton";
 
 export interface ChatMessage {
   role: "user" | "agent";
@@ -12,6 +13,7 @@ export default function Chat(props: {
   busy: boolean;
   done: boolean;
   onSend: (text: string) => void;
+  onReset: () => void;
 }) {
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -32,7 +34,13 @@ export default function Chat(props: {
             {message.text}
           </div>
         ))}
-        {props.busy && <div className="bubble agent thinking">…</div>}
+        {props.busy && (
+          <div className="bubble agent thinking" role="status" aria-label="Assistant is typing">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -57,6 +65,7 @@ export default function Chat(props: {
             }
           }}
         >
+          <ResetButton onClick={props.onReset} />
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}

@@ -252,7 +252,7 @@ async def _explain_with_llm(profile: dict, recommendations: dict) -> dict[str, l
     result = await writer.ainvoke(
         [("system", prompts.EXPLAIN_SYSTEM), ("human", json.dumps(payload, default=str))]
     )
-    return {item.slug: item.reasons for item in result.items}
+    return {item.slug: [reason.model_dump() for reason in item.reasons] for item in result.items}
 
 
 async def explain(state: AgentState) -> dict:
@@ -265,7 +265,16 @@ async def explain(state: AgentState) -> dict:
     )
     for policies in recommendations.values():
         for policy in policies:
-            policy["match_reasons"] = reason_map.get(policy["slug"], [prompts.FALLBACK_REASON])
+            reasons = reason_map.get(policy["slug"]) or [
+                {"text": prompts.FALLBACK_REASON, "kind": "match"}
+            ]
+            policy["match_reasons"] = reasons
+            # Strength is the writer's honest read: any surfaced gap → partial.
+            # The verifier preserves gap reasons, so this stays consistent after
+            # verification (which only drops ungrounded positive claims).
+            policy["match_strength"] = (
+                "partial" if any(reason["kind"] == "gap" for reason in reasons) else "strong"
+            )
 
     return {"recommendations": recommendations}
 
