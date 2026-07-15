@@ -499,11 +499,16 @@ button.link {
 }
 
 .build-stamp {
-  margin-top: 2.5rem;
-  padding-top: 1rem;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 0.45rem 1rem;
   border-top: 1px solid var(--border);
   text-align: center;
   color: var(--muted);
+  background: var(--bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.7rem;
   letter-spacing: 0.08em;
