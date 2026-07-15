@@ -18,10 +18,6 @@ class InsurerNotFound(LookupError):
     pass
 
 
-class SlugConflict(ValueError):
-    pass
-
-
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
@@ -302,41 +298,80 @@ def _get_or_create_insurer(conn, insurer_name: str) -> Any:
 
 
 def publish(run_id: str, draft: dict[str, Any], reviewed_by: str) -> dict[str, Any]:
-    """Approve a review: create published policy + version (+ embedding)."""
+    """Approve a review: publish the policy plus a new version (+ embedding).
+
+    Re-approving a policy that already exists (same slug — e.g. a re-upload of
+    the same brochure after a better parse/extraction) is a valid **update**, not
+    an error: the current version is superseded and a new version becomes current.
+    History is preserved, and any past recommendation that snapshotted an older
+    ``policy_version_id`` still resolves. Readers surface only the current version
+    (``superseded_at IS NULL``)."""
     review = get_review(run_id)
     if review is None:
         raise LookupError(run_id)
 
     slug = slugify(draft["name"])
     with get_engine().begin() as conn:
-        if conn.execute(
-            text("SELECT 1 FROM catalog.policies WHERE slug = :slug"), {"slug": slug}
-        ).first():
-            raise SlugConflict(slug)
-
         insurer_id = _get_or_create_insurer(conn, draft["insurer_name"])
         conn.execute(
             text("UPDATE catalog.source_documents SET insurer_id = :iid WHERE id = :doc"),
             {"iid": insurer_id, "doc": review["source_document_id"]},
         )
 
-        policy_id = conn.execute(
-            text(
-                """
-                INSERT INTO catalog.policies
-                    (insurer_id, product_line_id, name, slug, status)
-                SELECT :insurer_id, pl.id, :name, :slug, 'published'
-                FROM catalog.product_lines pl WHERE pl.code = :line
-                RETURNING id
-                """
-            ),
-            {
-                "insurer_id": insurer_id,
-                "name": draft["name"],
-                "slug": slug,
-                "line": draft["product_line"],
-            },
-        ).scalar_one()
+        existing = conn.execute(
+            text("SELECT id FROM catalog.policies WHERE slug = :slug"), {"slug": slug}
+        ).scalar()
+        if existing is not None:
+            # Re-publish: the insurer or product line may have been corrected, so
+            # refresh the policy row, supersede the current version, and bump the
+            # version number for the new row inserted below.
+            policy_id = existing
+            conn.execute(
+                text(
+                    """
+                    UPDATE catalog.policies
+                    SET insurer_id = :insurer_id,
+                        product_line_id =
+                            (SELECT id FROM catalog.product_lines WHERE code = :line),
+                        status = 'published'
+                    WHERE id = :policy_id
+                    """
+                ),
+                {"insurer_id": insurer_id, "line": draft["product_line"], "policy_id": policy_id},
+            )
+            version = conn.execute(
+                text(
+                    "SELECT COALESCE(MAX(version), 0) + 1 FROM catalog.policy_versions "
+                    "WHERE policy_id = :policy_id"
+                ),
+                {"policy_id": policy_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "UPDATE catalog.policy_versions SET superseded_at = now() "
+                    "WHERE policy_id = :policy_id AND superseded_at IS NULL"
+                ),
+                {"policy_id": policy_id},
+            )
+        else:
+            policy_id = conn.execute(
+                text(
+                    """
+                    INSERT INTO catalog.policies
+                        (insurer_id, product_line_id, name, slug, status)
+                    SELECT :insurer_id, pl.id, :name, :slug, 'published'
+                    FROM catalog.product_lines pl WHERE pl.code = :line
+                    RETURNING id
+                    """
+                ),
+                {
+                    "insurer_id": insurer_id,
+                    "name": draft["name"],
+                    "slug": slug,
+                    "line": draft["product_line"],
+                },
+            ).scalar_one()
+            version = 1
 
         version_id = conn.execute(
             text(
@@ -346,7 +381,7 @@ def publish(run_id: str, draft: dict[str, Any], reviewed_by: str) -> dict[str, A
                      premium_frequency, eligibility, coverage, exclusions, riders,
                      source_document_id, verified_at, published_at)
                 VALUES
-                    (:policy_id, 1, :summary, :premium_min, :premium_max,
+                    (:policy_id, :version, :summary, :premium_min, :premium_max,
                      :premium_frequency, :eligibility, :coverage, :exclusions,
                      :riders, :doc_id, now(), now())
                 RETURNING id
@@ -354,6 +389,7 @@ def publish(run_id: str, draft: dict[str, Any], reviewed_by: str) -> dict[str, A
             ),
             {
                 "policy_id": policy_id,
+                "version": version,
                 "summary": draft["summary"],
                 "premium_min": draft.get("premium_min"),
                 "premium_max": draft.get("premium_max"),
@@ -396,4 +432,9 @@ def publish(run_id: str, draft: dict[str, Any], reviewed_by: str) -> dict[str, A
             {"id": run_id, "by": reviewed_by},
         )
 
-    return {"policy_id": str(policy_id), "version_id": str(version_id), "slug": slug}
+    return {
+        "policy_id": str(policy_id),
+        "version_id": str(version_id),
+        "slug": slug,
+        "version": version,
+    }

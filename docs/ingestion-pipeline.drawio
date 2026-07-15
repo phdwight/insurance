@@ -58,7 +58,7 @@
           <mxGeometry x="690" y="790" width="140" height="70" as="geometry" />
         </mxCell>
 
-        <mxCell id="publish" value="publish (one transaction)&#10;get-or-create insurer · policy +&#10;version (published) · embedding;&#10;slug conflict blocks double-publish" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="publish" value="publish (one transaction)&#10;get-or-create insurer · policy +&#10;version (published) · embedding;&#10;re-approve same slug → new version, supersede old" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="660" y="900" width="200" height="90" as="geometry" />
         </mxCell>
 

@@ -29,7 +29,7 @@ Upload (PDF/DOCX + metadata)
 
 **Human review.** The reviewer UI (`:8003/admin`) opens each new upload automatically: draft editor with the source document one click away, approve/reject. Progressive disclosure — the queue appears only when runs exist. Nothing reaches the live catalog without approval (protects against hallucinated coverage).
 
-**Publish.** Transactional: get-or-create the insurer from the confirmed `insurer_name`, insert the policy (published) + `policy_version`, generate the embedding (name + summary) into pgvector when a key is set. Duplicate policy slugs are rejected, so a redo can't double-publish. *Future: re-versioning an existing policy (new `policy_version`, supersede the old) — today each publish is version 1 of a new policy.*
+**Publish.** Transactional: get-or-create the insurer from the confirmed `insurer_name`, insert the policy (published) + `policy_version` (version 1), generate the embedding (name + summary) into pgvector when a key is set. **Re-approving an existing policy (same slug) re-versions it instead of erroring** — the policy row is refreshed (insurer/line may have been corrected), the current `policy_version` is marked `superseded_at = now()`, and a new version (v2, v3…) becomes current with its own embedding. Readers select only the current version (`superseded_at IS NULL`), so search never returns duplicates, and any recommendation that snapshotted an older `policy_version_id` still resolves. This is the redo path after a re-upload with a better parse/extraction.
 
 ### Pipeline API (ingestion service, :8003) — implemented
 

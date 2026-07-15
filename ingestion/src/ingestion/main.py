@@ -122,10 +122,6 @@ def approve(run_id: str, request: ApprovalRequest, _auth: Protected = None) -> d
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail="review not found") from error
-    except repository.SlugConflict as error:
-        raise HTTPException(
-            status_code=409, detail=f"policy slug already exists: {error}"
-        ) from error
     return {"published": published}
 
 
