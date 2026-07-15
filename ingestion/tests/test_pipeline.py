@@ -434,7 +434,8 @@ def test_vision_routes_clean_pdf_to_docling(monkeypatch, tmp_path) -> None:
     drain_worker()
     parse_status = list(repo.parse_statuses.values())[-1]
     assert "parsed:pypdf" in parse_status  # real text layer -> no vision recovery
-    assert "vision → docling" in parse_status
+    # the verbose triage reason is NOT dumped into the reviewer status (it's logged)
+    assert "clean digital text" not in parse_status
 
 
 def test_vision_recovers_thin_docling_text(monkeypatch, tmp_path) -> None:
