@@ -66,6 +66,20 @@
           <mxGeometry x="690" y="1030" width="140" height="55" as="geometry" />
         </mxCell>
 
+        <mxCell id="correct" value="auto-correct (≤3×)&#10;frontier LLM re-reads the&#10;document with the error,&#10;fixes the draft" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="920" y="770" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e-fail" edge="1" parent="1" source="verdict" target="correct" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="fails validation">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-corrected" edge="1" parent="1" source="correct" target="review" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=11;endArrow=block;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="corrected draft → re-review">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1025" y="705" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
         <!-- ===== left column ===== -->
         <mxCell id="note-parse" value="no step is silent: route/parser + reason recorded in parse_status, shown in the UI. VISION_TRIAGE — the frontier LLM_MODEL reads image-heavy/scanned PDFs and transcribes to markdown itself (else routes to docling); vision failure degrades to docling, and if docling returns only image placeholders (no text layer) the worker recovers by having vision transcribe the pages (parsed:llm-vision). DOCLING_ENABLED switch; OCR off (vision covers scans); docling models + libgl1/libglib2.0-0 baked into the image" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="180" y="160" width="300" height="105" as="geometry" />

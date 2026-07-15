@@ -201,6 +201,9 @@ services:
     environment:
       <<: [*app-env, *embedding-env]
       DOCS_DIR: /data/uploads
+      # Frontier model — the approve auto-correction pass re-reads the document
+      # visually to repair a draft that failed validation.
+      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
       LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

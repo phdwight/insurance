@@ -236,9 +236,12 @@ def test_full_pipeline_upload_review_approve(monkeypatch, tmp_path) -> None:
 def test_draft_without_insurer_name_rejected(monkeypatch, tmp_path) -> None:
     repo = FakeRepo()
     repo.install(monkeypatch, tmp_path)
+    run_id = repo.create_run("doc-1", "m", {}, "pending_review")
     draft = {k: v for k, v in VALID_DRAFT.items() if k != "insurer_name"}
-    response = client.post("/reviews/run-x/approve", json={"draft": draft})
-    assert response.status_code == 422  # insurer_name is required on approval
+    # insurer_name required; with no LLM key/file, auto-correction is unavailable,
+    # so the error is surfaced for a manual fix.
+    response = client.post(f"/reviews/{run_id}/approve", json={"draft": draft})
+    assert response.status_code == 422
 
 
 def test_llm_extraction_feeds_pending_review(monkeypatch, tmp_path) -> None:
@@ -293,8 +296,9 @@ def test_approve_validates_draft_and_missing_run(monkeypatch, tmp_path) -> None:
     repo.install(monkeypatch, tmp_path)
 
     # discriminated union rejects a draft whose coverage doesn't match the line
+    run_id = repo.create_run("doc-1", "m", {}, "pending_review")
     bad = dict(VALID_DRAFT, coverage={"line": "life", "policy_type": "term"})
-    response = client.post("/reviews/run-x/approve", json={"draft": bad})
+    response = client.post(f"/reviews/{run_id}/approve", json={"draft": bad})
     assert response.status_code == 422
 
     response = client.post("/reviews/run-missing/approve", json={"draft": VALID_DRAFT})
