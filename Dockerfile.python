@@ -23,6 +23,18 @@ ENV PATH="/app/.venv/bin:$PATH"
 # first upload doesn't fetch them mid-request (which blows past reverse-proxy
 # timeouts) and so parsing works with no outbound internet. OCR models are
 # skipped — docling runs with OCR disabled (see ingestion/.../parsing.py).
+# Retried with backoff: the models come from Hugging Face Hub, whose transient
+# 5xx errors would otherwise fail the whole image build (snapshot downloads
+# resume, so retries make progress). The [ -n "$ok" ] fails the build for real
+# if every attempt is exhausted.
 RUN if [ "$SERVICE" = "ingestion" ]; then \
-      python -c "from docling.utils.model_downloader import download_models; download_models(progress=False, with_rapidocr=False, with_code_formula=False, with_picture_classifier=False)"; \
+      ok=""; \
+      for attempt in 1 2 3 4 5; do \
+        if python -c "from docling.utils.model_downloader import download_models; download_models(progress=False, with_rapidocr=False, with_code_formula=False, with_picture_classifier=False)"; then \
+          ok=1; break; \
+        fi; \
+        echo "docling model download failed (attempt ${attempt}/5); retrying in $((attempt * 30))s"; \
+        sleep $((attempt * 30)); \
+      done; \
+      [ -n "$ok" ]; \
     fi
