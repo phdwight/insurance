@@ -47,6 +47,8 @@ Upload (PDF/DOCX + metadata)
 | `GET /documents/{id}/file` | Serves the original uploaded document (side-by-side review) |
 | `GET /policies/{slug}/brochure` | **Public** (no token) — cover-page PNG of a published policy's brochure, rendered once from the stored PDF (`pypdfium2`) and cached. Served **only** when the source `doc_type` is `brochure`/`product_summary`; a contract or unpublished slug 404s. |
 | `GET /policies/{slug}/document` | **Public** (no token) — the original brochure document (inline), same eligibility gate. Powers the clickable brochure thumbnail in results. |
+
+End users reach both via the **API gateway**, which proxies the same paths from the ingestion service (the PWA defaults its brochure base to the API URL) — so the ingestion hostname itself can sit entirely behind an access layer (e.g. Cloudflare Access) without breaking covers in results. The eligibility gate stays enforced by the ingestion service; the proxy never widens access.
 | `GET /admin` | **Reviewer UI** — drop-and-go upload with a step tracker, `pending`/`live` header, status-filtered queue with counts, draft editor (schema-validated on approve, auto-repair on failure), approve/reject. Single static page, no build step. |
 
 **Auth:** every data endpoint requires the `ADMIN_TOKEN` (bearer header or `?token=` for new-tab document links; constant-time compare). Only `/health` and the `/admin` page shell (which carries no data) stay open. An empty `ADMIN_TOKEN` leaves the service open — local development only.

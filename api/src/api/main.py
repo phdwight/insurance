@@ -11,11 +11,12 @@ from collections import deque
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8001")
 MCP_HTTP_URL = os.environ.get("MCP_HTTP_URL", "http://localhost:8002")
+INGESTION_URL = os.environ.get("INGESTION_URL", "http://localhost:8003")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 
 # --- /chat rate limit --------------------------------------------------------
@@ -110,6 +111,38 @@ async def compare(slugs: str) -> dict:
         ) from error
     except httpx.HTTPError as error:
         raise HTTPException(status_code=502, detail=f"catalog unavailable: {error}") from error
+
+
+async def _proxy_public_file(path: str) -> Response:
+    """Pass a public policy file through from the ingestion service.
+
+    The ingestion service enforces eligibility (published policy AND a public
+    doc_type — brochure/product_summary; contracts and unknown slugs 404).
+    Proxying through the gateway means the ingestion hostname can sit entirely
+    behind an access layer (e.g. Cloudflare Access) without breaking the
+    end-user brochure covers the PWA shows."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            upstream = await client.get(f"{INGESTION_URL}{path}")
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"files unavailable: {error}") from error
+    if upstream.status_code != 200:
+        raise HTTPException(status_code=upstream.status_code, detail="not available")
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type", "application/octet-stream"),
+        headers={"cache-control": upstream.headers.get("cache-control", "public, max-age=3600")},
+    )
+
+
+@app.get("/policies/{slug}/brochure")
+async def policy_brochure(slug: str) -> Response:
+    return await _proxy_public_file(f"/policies/{slug}/brochure")
+
+
+@app.get("/policies/{slug}/document")
+async def policy_document(slug: str) -> Response:
+    return await _proxy_public_file(f"/policies/{slug}/document")
 
 
 @app.post("/chat")
