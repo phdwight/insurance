@@ -99,6 +99,8 @@
   button.act.danger { color:var(--red); border-color:var(--red); background:var(--card); }
   button.act:disabled { opacity:.55; cursor:progress; }
   .msg { font-size:.86rem; margin-top:12px; line-height:1.5; white-space:pre-wrap; }
+  .uc-msg { margin-top:10px; }
+  .uc-msg:empty { display:none; }
   .msg.ok { color:#15803d; } .msg.err { color:var(--red); } .msg.warn { color:var(--amber); } .msg.info { color:var(--accent); }
 
   .spin { display:inline-block; width:13px; height:13px; border:2px solid rgba(31,75,58,.25); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
@@ -155,16 +157,9 @@
       <input type="file" id="file" accept=".pdf,.txt,.md" hidden />
     </div>
 
-    <div class="upload-card" id="upload-progress" style="display:none">
-      <div class="uc-top">
-        <span class="file-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>
-        <div class="run-main"><div class="uc-name" id="up-name"></div><div class="uc-sub" id="up-sub"></div></div>
-        <span class="pill work" id="up-pill"></span>
-      </div>
-      <div class="steps" id="up-steps"></div>
-    </div>
-
-    <div class="msg" id="upload-msg"></div>
+    <!-- one card per in-flight upload, created dynamically so concurrent
+         uploads each track their own progress -->
+    <div id="uploads"></div>
     <p class="note">Extraction runs server-side — you can leave this page and come back to the queue.</p>
   </section>
 
@@ -290,7 +285,7 @@ function runRow(r) {
 }
 function escapeHtml(v) { return String(v).replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c])); }
 
-/* ---------- upload (drop-and-go) with a real step tracker ---------- */
+/* ---------- upload (drop-and-go) — each upload gets its own row + poll ---------- */
 const STEPS = ["Classify", "Redact PII", "Extract fields", "Draft"];
 function phaseFor(run) {
   // Honest, from what the run actually exposes: queued = nothing yet; processing
@@ -300,15 +295,39 @@ function phaseFor(run) {
   if (run.status === "processing") return run.parse_status ? { done: 2, active: 2 } : { done: 0, active: 0 };
   return { done: 4, active: -1 };
 }
-function renderSteps(run) {
+function renderSteps(el, run) {
   const { done, active } = phaseFor(run);
-  $("up-steps").innerHTML = STEPS.map((label, i) => {
+  el.innerHTML = STEPS.map((label, i) => {
     const cls = i < done ? "done" : i === active ? "active" : "";
     const mark = i < done ? "✓" : i === active ? '<span class="mini-spin"></span>' : (i + 1);
     return `<div class="step ${cls}"><span class="dot">${mark}</span>${label}</div>`;
   }).join('<span class="step-line"></span>');
 }
-function setPill(cls, html) { const p = $("up-pill"); p.className = `pill ${cls}`; p.innerHTML = html; }
+function setPill(el, cls, html) { el.className = `pill ${cls}`; el.innerHTML = html; }
+
+const FILE_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
+function newUploadCard(file) {
+  // A self-contained card so concurrent uploads never share DOM or poll state.
+  const card = document.createElement("div");
+  card.className = "upload-card";
+  card.innerHTML = `
+    <div class="uc-top">
+      <span class="file-icon">${FILE_SVG}</span>
+      <div class="run-main"><div class="uc-name"></div><div class="uc-sub"></div></div>
+      <span class="pill work"></span>
+    </div>
+    <div class="steps"></div>
+    <div class="uc-msg msg"></div>`;
+  card.querySelector(".uc-name").textContent = file.name;
+  $("uploads").prepend(card); // newest on top
+  return {
+    sub: card.querySelector(".uc-sub"),
+    pill: card.querySelector(".pill"),
+    steps: card.querySelector(".steps"),
+    msg: card.querySelector(".uc-msg"),
+  };
+}
 
 async function pollRun(runId, onTick) {
   const start = Date.now();
@@ -322,49 +341,52 @@ async function pollRun(runId, onTick) {
 
 async function startUpload(file) {
   if (!file) return;
-  const msg = $("upload-msg");
-  $("upload-progress").style.display = "block";
-  $("up-name").textContent = file.name;
-  $("up-sub").textContent = `${(file.size / 1e6).toFixed(1)} MB · uploading…`;
-  setPill("work", '<span class="spin"></span>Uploading');
-  renderSteps({ status: "queued" });
-  msg.className = "msg"; msg.textContent = "";
+  const u = newUploadCard(file);
+  const size = `${(file.size / 1e6).toFixed(1)} MB`;
+  u.sub.textContent = `${size} · uploading…`;
+  setPill(u.pill, "work", '<span class="spin"></span>Uploading');
+  renderSteps(u.steps, { status: "queued" });
 
   const data = new FormData();
   data.append("file", file);
   try {
     const result = await api("/documents", { method: "POST", body: data });
     showQueue(); state.status = "queued";
-    await loadStats(); await loadQueue();
-    $("up-sub").textContent = `${(file.size / 1e6).toFixed(1)} MB · parsing & extracting…`;
+    await loadStats(); renderFilters(); await loadQueue();
+    u.sub.textContent = `${size} · parsing & extracting…`;
 
     const run = await pollRun(result.extraction_run_id, (secs, run) => {
-      setPill("work", `<span class="spin"></span>Working · ${secs}s`);
-      renderSteps(run);
+      setPill(u.pill, "work", `<span class="spin"></span>Working · ${secs}s`);
+      renderSteps(u.steps, run);
     });
-    renderSteps(run);
+    renderSteps(u.steps, run);
 
+    // Only auto-open when the reviewer isn't already looking at a draft, so a
+    // second upload finishing doesn't yank the one being reviewed.
+    const canOpen = $("detail").style.display !== "block";
     if (run.status === "rejected_invalid") {
-      setPill("err", "Not insurance");
-      msg.className = "msg err";
-      msg.textContent = "Not a valid document — only insurance-related documents are accepted.\n" +
+      setPill(u.pill, "err", "Not insurance");
+      u.msg.className = "uc-msg msg err";
+      u.msg.textContent = "Not a valid document — only insurance-related documents are accepted.\n" +
         ((run.output && run.output.reason) || "The AI didn't recognize this as an insurance document.");
     } else if (run.status === "failed") {
-      setPill("err", "Failed");
-      msg.className = "msg err";
-      msg.textContent = "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
+      setPill(u.pill, "err", "Failed");
+      u.msg.className = "uc-msg msg err";
+      u.msg.textContent = "Parsing/extraction failed:\n" + ((run.output && run.output.error) || "unknown error") +
         "\nFix the cause and re-upload the same file to retry.";
     } else {
-      setPill("done", "✓ Ready");
-      msg.className = "msg ok";
-      msg.textContent = `Done — status: ${STATUS[run.status]?.label ?? run.status}. Opened for review below.`;
+      setPill(u.pill, "done", "✓ Ready");
+      u.msg.className = "uc-msg msg ok";
+      u.msg.textContent = `Done — status: ${STATUS[run.status]?.label ?? run.status}.` +
+        (canOpen ? " Opened for review below." : " Waiting in the queue below.");
     }
     state.status = run.status;
     await loadStats(); renderFilters(); await loadQueue();
-    if (run.status !== "failed" && run.status !== "rejected_invalid") await openRun(result.extraction_run_id);
+    if (canOpen && run.status !== "failed" && run.status !== "rejected_invalid")
+      await openRun(result.extraction_run_id);
   } catch (error) {
-    setPill("err", "Error");
-    msg.className = "msg err"; msg.textContent = error.message;
+    setPill(u.pill, "err", "Error");
+    u.msg.className = "uc-msg msg err"; u.msg.textContent = error.message;
   }
 }
 
