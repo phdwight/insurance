@@ -12,12 +12,16 @@ const API =
   import.meta.env.VITE_API_URL ||
   "http://localhost:8000";
 
-// Public ingestion base for brochure cover images + documents. Empty in prod
-// unless configured (feature stays off — cards just show the placeholder).
+// Public base for brochure cover images + documents. The API gateway proxies
+// /policies/{slug}/brochure|document from the ingestion service, so the
+// default is simply the API — set VITE_INGESTION_URL only to serve files from
+// a different public host. (Never point it at an access-gated ingestion host:
+// the browser's <img> can't log in, and covers silently fall back to the
+// placeholder.)
 const INGESTION =
   window.__APP_CONFIG__?.INGESTION_URL ||
   import.meta.env.VITE_INGESTION_URL ||
-  (import.meta.env.DEV ? "http://localhost:8003" : "");
+  (import.meta.env.DEV ? "http://localhost:8003" : API);
 
 export const brochureImageUrl = (slug: string): string | null =>
   INGESTION ? `${INGESTION}/policies/${slug}/brochure` : null;

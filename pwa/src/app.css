@@ -443,8 +443,10 @@ a.brochure:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 }
 
 @media (max-width: 560px) {
-  .policy-body { flex-direction: column-reverse; align-items: stretch; }
-  .brochure { flex-basis: auto; width: 100%; aspect-ratio: 16 / 9; align-self: stretch; }
+  /* Keep the brochure a modest thumbnail beside the reasons — a full-width
+     block dwarfed the actual content on phones. */
+  .policy-body { align-items: flex-start; }
+  .brochure { flex-basis: 72px; }
   .stat-row { grid-template-columns: 1fr; }
   .intake h1 { font-size: 2.4rem; }
 }

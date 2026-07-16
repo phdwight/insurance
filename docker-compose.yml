@@ -55,6 +55,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       AGENT_URL: http://agent:8001
       MCP_HTTP_URL: http://mcp-server:8002
+      INGESTION_URL: http://ingestion:8003
       RATE_LIMIT_CHAT: ${RATE_LIMIT_CHAT:-30/60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     ports:
