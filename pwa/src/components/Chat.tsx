@@ -65,11 +65,19 @@ export default function Chat(props: {
 
       {showChoices && (
         <div className="answer-chips">
-          {props.question!.options!.map((option) => (
-            <button key={option} className="answer-chip" onClick={() => props.onSend(option)}>
-              {option}
-            </button>
-          ))}
+          {props.question!.options!.map((option) => {
+            const help = props.question!.option_help?.[option];
+            return (
+              <button
+                key={option}
+                className={help ? "answer-chip has-help" : "answer-chip"}
+                onClick={() => props.onSend(option)}
+              >
+                <span className="answer-chip-label">{option}</span>
+                {help && <span className="answer-chip-help">{help}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 

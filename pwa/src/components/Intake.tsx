@@ -4,19 +4,13 @@ import { SendIcon } from "./icons";
 
 const ArrowIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5 12h13M13 6l6 6-6 6"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+    <path d="M5 12h13M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
 const LockIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
+    <rect x="4" y="10" width="16" height="10" rx="0" stroke="currentColor" strokeWidth="2" />
     <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
@@ -29,9 +23,7 @@ export default function Intake(props: {
   const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
-    fetchProductLines()
-      .then(setLines)
-      .catch(() => setCatalogError(true));
+    fetchProductLines().then(setLines).catch(() => setCatalogError(true));
   }, []);
 
   const available = lines.filter((line) => line.policy_count > 0);
@@ -39,29 +31,34 @@ export default function Intake(props: {
   return (
     <section className="intake">
       <div className="intake-hero">
-        <p className="eyebrow">AI Insurance Concierge</p>
-        <h1>What would you like to protect?</h1>
-        <p className="sub">
-          Tell me in your own words — or I&rsquo;ll walk you through it, one question at a time.
-        </p>
+        {/* Steel Field: eyebrow + headline + sub + input live inside the dark
+            hero field; category chips and the guided card sit on the paper
+            ground below it. */}
+        <div className="hero-field">
+          <p className="eyebrow">AI Insurance Concierge</p>
+          <h1>What would you like to protect?</h1>
+          <p className="sub">
+            Tell me in your own words — or I&rsquo;ll walk you through it, one question at a time.
+          </p>
 
-        <form
-          className="hero-input"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (text.trim()) props.onSubmit(text.trim(), "freeform");
-          }}
-        >
-          <input
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="e.g. life cover for my young family"
-            aria-label="Describe what you want to protect"
-          />
-          <button type="submit" className="hero-send" disabled={!text.trim()} aria-label="Start">
-            <SendIcon size={19} />
-          </button>
-        </form>
+          <form
+            className="hero-input"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (text.trim()) props.onSubmit(text.trim(), "freeform");
+            }}
+          >
+            <input
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="e.g. life cover for my young family"
+              aria-label="Describe what you want to protect"
+            />
+            <button type="submit" className="hero-send" disabled={!text.trim()} aria-label="Start">
+              <SendIcon size={19} />
+            </button>
+          </form>
+        </div>
 
         {available.length > 0 && (
           <div className="chips">
@@ -104,4 +101,3 @@ export default function Intake(props: {
     </section>
   );
 }
-

@@ -13,9 +13,6 @@ function peso(value: string | number | null): string {
   return `₱${Number(value).toLocaleString()}`;
 }
 
-/** Normalize a value for display: treat JS null/undefined AND null-ish strings
- *  ("null", "undefined", "none", empty) that leak through from extraction as
- *  genuinely missing, so the raw word "null" never reaches the user. */
 function clean(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -28,10 +25,12 @@ function renderValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "yes" : "no";
   if (Array.isArray(value)) return value.length ? value.join("; ") : "—";
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .filter(([key, v]) => v !== null && v !== undefined && key !== "line")
-      .map(([key, v]) => `${key.replaceAll("_", " ")}: ${renderValue(v)}`)
-      .join(" · ") || "—";
+    return (
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key, v]) => v !== null && v !== undefined && key !== "line")
+        .map(([key, v]) => `${key.replaceAll("_", " ")}: ${renderValue(v)}`)
+        .join(" · ") || "—"
+    );
   }
   return clean(value) ?? "—";
 }
@@ -47,8 +46,6 @@ const COMPARE_ROWS = [
   "verified_at",
 ];
 
-// The writer classifies each reason as "match" or "gap"; normalize here so a
-// plain string (older payload / guided-mode fallback) is treated as a match.
 function normalizeReason(reason: MatchReason | string): MatchReason {
   if (typeof reason === "string") return { text: reason, kind: "match" };
   return { text: reason.text, kind: reason.kind === "gap" ? "gap" : "match" };
@@ -60,9 +57,6 @@ function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-// Up to three concise facts from the coverage JSON, per product line — they
-// render as a stat row, so values are kept short (long free text is trimmed,
-// and a maturity sentence is reduced to its "N% of face" gist when present).
 function coverageStats(
   line: string,
   coverage: Record<string, unknown> | null | undefined,
@@ -120,82 +114,85 @@ function PolicyCard(props: {
   const hasPremium = policy.premium_min != null || policy.premium_max != null;
   return (
     <article className={`policy-card ${props.selected ? "selected" : ""}`}>
-      <div className="policy-main">
-        <header>
-          <div className="policy-title">
-            <h3>{policy.name}</h3>
-            <p className="insurer">{clean(policy.insurer_name) ?? "Insurer not specified"}</p>
+      <header>
+        <div className="policy-title">
+          <h3>{policy.name}</h3>
+          <p className="insurer">{clean(policy.insurer_name) ?? "Insurer not specified"}</p>
+        </div>
+        <label className="compare-pick">
+          <input type="checkbox" checked={props.selected} onChange={props.onToggle} />
+          compare
+        </label>
+      </header>
+
+      <p className={`match-badge ${strong ? "strong" : "partial"}`}>
+        <span className="badge-pill">
+          <span className="dot" />
+          {strong ? "Strong match" : "Partial match"}
+        </span>
+        <span className="match-note">
+          {strong ? "meets all specified criteria" : "missing key details"}
+        </span>
+      </p>
+
+      <dl className="stat-row">
+        {stats.map((stat) => (
+          <div key={stat.label} className="stat">
+            <dt>{stat.label}</dt>
+            <dd className={stat.value === NOT_SPEC ? "muted" : ""}>{stat.value}</dd>
           </div>
-          <label className="compare-pick">
-            <input type="checkbox" checked={props.selected} onChange={props.onToggle} />
-            compare
-          </label>
-        </header>
+        ))}
+      </dl>
 
-        <p className={`match-badge ${strong ? "strong" : "partial"}`}>
-          <span className="badge-pill">
-            <span className="dot" />
-            {strong ? "Strong match" : "Partial match"}
-          </span>
-          <span className="match-note">
-            {strong ? "meets all specified criteria" : "missing key details"}
-          </span>
-        </p>
-
-        <dl className="stat-row">
-          {stats.map((stat) => (
-            <div key={stat.label} className="stat">
-              <dt>{stat.label}</dt>
-              <dd className={stat.value === NOT_SPEC ? "muted" : ""}>{stat.value}</dd>
-            </div>
-          ))}
-        </dl>
-
-        {hasPremium && (
-          <p className="premium">
-            {peso(policy.premium_min)} – {peso(policy.premium_max)}
-            {policy.premium_frequency && (
-              <span className="freq">
-                {" "}
-                {policy.premium_frequency === "single" ? "one-time" : policy.premium_frequency}
-              </span>
-            )}
-          </p>
-        )}
-
-        <ul className="reasons">
-          {reasons.map((reason, index) => {
-            const gap = reason.kind === "gap";
-            return (
-              <li key={index} className={gap ? "gap" : "ok"}>
-                <span className="reason-icon" aria-hidden="true">
-                  {gap ? "!" : "✓"}
+      {/* Premium + reasons sit on one row, leveled with the brochure thumbnail. */}
+      <div className="policy-body">
+        <div className="policy-body-main">
+          {hasPremium && (
+            <p className="premium">
+              {peso(policy.premium_min)} – {peso(policy.premium_max)}
+              {policy.premium_frequency && (
+                <span className="freq">
+                  {" "}
+                  {policy.premium_frequency === "single" ? "one-time" : policy.premium_frequency}
                 </span>
-                {reason.text}
-              </li>
-            );
-          })}
-        </ul>
-
-        {policy.exclusions?.length > 0 && (
-          <p className="exclusions">Key exclusions: {policy.exclusions.join("; ")}</p>
-        )}
-
-        <footer>
-          {policy.verified_at && (
-            <span className="verified">
-              Data as of {new Date(policy.verified_at).toLocaleDateString()}
-            </span>
+              )}
+            </p>
           )}
-          {policy.source_url && (
-            <a href={policy.source_url} target="_blank" rel="noreferrer">
-              Official document
-            </a>
-          )}
-        </footer>
+
+          <ul className="reasons">
+            {reasons.map((reason, index) => {
+              const gap = reason.kind === "gap";
+              return (
+                <li key={index} className={gap ? "gap" : "ok"}>
+                  <span className="reason-icon" aria-hidden="true">
+                    {gap ? "!" : "✓"}
+                  </span>
+                  {reason.text}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <BrochurePanel slug={policy.slug} />
       </div>
 
-      <BrochurePanel slug={policy.slug} />
+      {policy.exclusions?.length > 0 && (
+        <p className="exclusions">Key exclusions: {policy.exclusions.join("; ")}</p>
+      )}
+
+      <footer>
+        {policy.verified_at && (
+          <span className="verified">
+            Data as of {new Date(policy.verified_at).toLocaleDateString()}
+          </span>
+        )}
+        {policy.source_url && (
+          <a href={policy.source_url} target="_blank" rel="noreferrer">
+            Official document
+          </a>
+        )}
+      </footer>
     </article>
   );
 }
@@ -234,9 +231,7 @@ export default function Results(props: { recommendations: Recommendations }) {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [error, setError] = useState("");
 
-  const lines = Object.entries(props.recommendations).filter(
-    ([, policies]) => policies.length > 0,
-  );
+  const lines = Object.entries(props.recommendations).filter(([, policies]) => policies.length > 0);
   if (lines.length === 0) return null;
 
   function toggle(slug: string) {
