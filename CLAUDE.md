@@ -42,7 +42,7 @@ Product and process decisions made by the project owner across sessions. Don't r
 - **Admin/reviewer UX:** progressive disclosure (queue hidden until runs exist), new uploads auto-open for review, long operations show a busy state with honest text — no fake progress percentages for server-side work.
 - **Seed data is fictional and labeled "(Demo)"** until real policies are hand-entered from brochures. Never fabricate real insurer policy details.
 - **UX:** dual intake — free-text (LLM extraction) and catalog-sourced category chips with live policy counts. Choice questions render as tap chips, numeric questions as numeric inputs; free typing always remains available. The UI never advertises a category the catalog can't serve.
-- **No-match is a valid outcome** — presented honestly, never a forced fit.
+- **No-match is a valid outcome** — presented honestly, never a forced fit, and **always with a deterministic diagnosis** (which answer excluded which policy, from the same `keeps()`/`check_policy` checks that decided; `no_match` ledger event for admin audit). Matching and no-match are never LLM decisions — don't add LLM "checkers" for them; surface the deterministic reason instead.
 
 ### Architecture & stack
 - **Monorepo** (single repo, uv workspace + npm PWA); split only on a concrete trigger.

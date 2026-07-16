@@ -33,7 +33,7 @@
           <mxGeometry x="660" y="560" width="200" height="70" as="geometry" />
         </mxCell>
 
-        <mxCell id="explain" value="explain&#10;cache hit? serve verified result&#10;(skip writer + panel) · else reasons&#10;grounded ONLY in verified fields" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="explain" value="explain&#10;cache hit? serve verified result&#10;(skip writer + panel) · else reasons&#10;grounded ONLY in verified fields&#10;no-match → deterministic diagnosis&#10;(which answer excluded which policy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="660" y="680" width="200" height="70" as="geometry" />
         </mxCell>
 

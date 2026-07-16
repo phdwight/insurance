@@ -121,6 +121,19 @@ DET_REASON_ATTR = "Matches your preference — {attribute}: {value}."
 DET_REASON_FLAG = "Includes {attribute}."
 DET_GAP_ATTR = "This plan doesn't state {attribute}, which you asked about."
 
+# No-match diagnosis — rendered deterministically from the exact fields that
+# excluded each candidate, so a no-match says WHY instead of looking like the
+# agent "missed" a policy an admin knows exists. Honest and auditable.
+NO_MATCH_REASON_AGE = "accepts ages {age_min}–{age_max} (you said {age})"
+NO_MATCH_REASON_ATTR = "has {attribute} {stated}, you asked for {wanted}"
+NO_MATCH_REASON_FLAG = "doesn't include {attribute}"
+NO_MATCH_REASON_UNSUPPORTED = "doesn't support {attribute}: {wanted}"
+
+
+def no_match_detail(line: str, items: list[str]) -> str:
+    return f"Why nothing matched for {line}: " + "; ".join(items) + "."
+
+
 # Premium-frequency wording for deterministic templates.
 FREQUENCY_LABELS = {
     "monthly": "per month",

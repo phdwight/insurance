@@ -13,6 +13,7 @@ live with the discriminator registry; this module only orchestrates.
 
 import asyncio
 import json
+import logging
 import re
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -30,8 +31,10 @@ from agent.discriminators import (
 from agent.llm import get_model, llm_available
 from agent.parsing import detect_product_lines
 from agent.state import AgentState
-from agent.verify import deterministic_reasons, verify_candidates
+from agent.verify import deterministic_reasons, no_match_details, verify_candidates
 from shared import NeedsProfile, merge_profiles
+
+logger = logging.getLogger("agent")
 
 # Anti-loop guardrails (MAX_QUESTIONS caps the discriminator loop; these two
 # bound everything else so no session can recurse forever):
@@ -39,7 +42,10 @@ MAX_BOOTSTRAP_TURNS = 3  # "what would you like to protect?" attempts
 MAX_TURNS = 20  # absolute user-turn ceiling; decide() stops asking beyond it
 
 TRANSCRIPT_CHAR_LIMIT = 600
-SEARCH_LIMIT = 8
+# The MCP server caps search at 20. Staying at the cap matters: a lower limit
+# silently truncates the candidate pool once the catalog outgrows it — a
+# published policy would become invisible to matching (a genuine-miss bug).
+SEARCH_LIMIT = 20
 
 
 def _last_user_text(state: AgentState) -> str:
@@ -196,10 +202,13 @@ async def match(state: AgentState) -> dict:
     needs_text = _user_transcript(state)
 
     async def fetch(line: str) -> tuple[str, list]:
+        # Age is deliberately NOT a search filter: the *.age discriminator
+        # narrows client-side, so age-excluded policies stay in the pool and
+        # the no-match diagnosis can name them ("term plans accept 18–60, you
+        # said 63") instead of them silently vanishing before matching.
         found = await mcp_client.search_policies(
             product_line=line,
             needs_description=needs_text or None,
-            age=profile.age,
             limit=SEARCH_LIMIT,
         )
         slugs = [r["slug"] for r in found.get("results", []) if r.get("slug")]
@@ -208,7 +217,9 @@ async def match(state: AgentState) -> dict:
 
     lines = [line.value for line in profile.product_lines]
     pairs = await asyncio.gather(*(fetch(line) for line in lines))
-    return {"candidates": dict(pairs)}
+    # candidates get narrowed by decide(); the untouched pool feeds the
+    # no-match diagnosis (which policy was excluded by which answer).
+    return {"candidates": dict(pairs), "candidate_pool": dict(pairs)}
 
 
 def decide(state: AgentState) -> dict:
@@ -306,7 +317,18 @@ async def _explain_with_llm(profile: dict, recommendations: dict) -> dict[str, l
 async def explain(state: AgentState) -> dict:
     recommendations = state.get("recommendations", {})
     if not any(recommendations.values()):
-        return {"messages": [AIMessage(content=prompts.NO_MATCH_MESSAGE)], "done": True}
+        # Deterministic no-match diagnosis: say WHY each candidate was excluded
+        # (from the same keeps()/check_policy checks that decided), so a correct
+        # no-match never reads like the agent "missed" a policy. Ledgered so
+        # admins can audit every no-match for genuine misses.
+        details = no_match_details(
+            state.get("candidate_pool", {}), NeedsProfile(**state["profile"])
+        )
+        if details:
+            logger.info("no-match diagnosis: %s", " | ".join(details))
+        await usage.record_event("no_match")
+        text = "\n\n".join([prompts.NO_MATCH_MESSAGE, *details])
+        return {"messages": [AIMessage(content=text)], "done": True}
 
     use_writer = llm_available() and economy.writer_enabled()
 

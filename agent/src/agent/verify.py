@@ -144,6 +144,31 @@ def deterministic_reasons(policy: dict[str, Any], profile: NeedsProfile) -> list
     return reasons
 
 
+def no_match_details(
+    pool_by_line: dict[str, list[dict[str, Any]]], profile: NeedsProfile, max_items: int = 4
+) -> list[str]:
+    """Deterministic no-match diagnosis: for each line, why each candidate in
+    the pre-narrowing pool was excluded — the discriminator whose keeps() failed
+    (via exclusion_reason) or the first programmatic violation (check_policy).
+    Grounded in the same checks that made the decision, zero LLM."""
+    from agent import prompts
+    from agent.discriminators import exclusion_reason
+
+    details: list[str] = []
+    for line, pool in pool_by_line.items():
+        items: list[str] = []
+        for policy in pool[:max_items]:
+            reason = exclusion_reason(policy, profile, line)
+            if reason is None:
+                violations = check_policy(policy, profile)["violations"]
+                reason = violations[0] if violations else None
+            if reason:
+                items.append(f"{policy.get('name') or policy.get('slug')} {reason}")
+        if items:
+            details.append(prompts.no_match_detail(line, items))
+    return details
+
+
 def verify_candidates(
     candidates: list[dict[str, Any]], profile: NeedsProfile, keep: int = 3
 ) -> list[dict[str, Any]]:
