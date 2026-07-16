@@ -78,7 +78,7 @@
           <mxGeometry x="1150" y="245" width="140" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="note-ingest" value="guided: pending answer parsed by the discriminator that asked it (no LLM needed)&#10;freeform: LLM extraction (small model, never guesses), merged non-destructively" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="note-ingest" value="guided: pending answer parsed by the discriminator that asked it (no LLM needed)&#10;freeform: LLM extraction (small model, never guesses), merged non-destructively&#10;deterministic-parse-first: a message that is only the direct answer (chip tap, bare number, line pick) skips the extractor LLM" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#fff2cc;strokeColor=#d6b656;size=14;align=left;spacing=6;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="1150" y="95" width="290" height="95" as="geometry" />
         </mxCell>
 

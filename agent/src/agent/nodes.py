@@ -13,6 +13,7 @@ live with the discriminator registry; this module only orchestrates.
 
 import asyncio
 import json
+import re
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -21,6 +22,7 @@ from agent.discriminators import (
     MAX_QUESTIONS,
     TARGET_RESULTS,
     apply_answer,
+    by_id,
     narrow,
     pick_question,
     region_of,
@@ -62,6 +64,32 @@ def _derive(profile: NeedsProfile) -> NeedsProfile:
     return profile
 
 
+# A bare number, optionally with currency noise ("35", "₱3,000", "2500.50").
+# Deliberately does NOT accept extra words: "3000 monthly" or "35 and I smoke"
+# carries information the deterministic parser can't capture (frequency, risk
+# notes), so those still go to the extractor.
+_BARE_NUMBER = re.compile(r"[₱$]?\s*[\d,]+(?:\.\d+)?")
+
+
+def _fully_answered(pending: str | None, text: str, parsed: bool) -> bool:
+    """True when the message is nothing but the direct answer to the pending
+    question — an exact chip option or a bare number — leaving the LLM
+    extractor nothing to mine. Deterministic; anything richer still extracts."""
+    if not parsed or not pending:
+        return False
+    answer = text.strip()
+    if pending == "budget":
+        return _BARE_NUMBER.fullmatch(answer) is not None
+    disc = by_id(pending)
+    if disc is None:
+        return False
+    if disc.kind == "choice":
+        return any(answer.casefold() == option.casefold() for option in disc.options or ())
+    if disc.kind == "number":
+        return _BARE_NUMBER.fullmatch(answer) is not None
+    return False
+
+
 async def _extract_with_llm(profile: NeedsProfile, text: str) -> NeedsProfile:
     # NeedsProfile.per_line is an open-ended map, which OpenAI's strict
     # json_schema structured output can't represent (it demands
@@ -88,8 +116,20 @@ async def ingest(state: AgentState) -> dict:
     if detected:
         profile.product_lines = list(dict.fromkeys(profile.product_lines + detected))
 
+    # Deterministic-parse-first: a message that is only the direct answer (a
+    # chip tap, a bare number, or a short line pick like "Life") leaves the
+    # extractor nothing to add — skip the LLM call. The PWA stays in freeform
+    # mode after a typed start, so without this every chip tap paid for one.
+    fully_answered = _fully_answered(pending, text, parsed) or (
+        not pending and bool(detected) and len(text.split()) <= 2
+    )
+
     # Free-form extraction (also rescues unparsed guided answers) when a key exists.
-    if llm_available() and (state.get("mode") == "freeform" or not parsed):
+    if (
+        llm_available()
+        and not fully_answered
+        and (state.get("mode") == "freeform" or not parsed)
+    ):
         profile = await _extract_with_llm(profile, text)
 
     return {
