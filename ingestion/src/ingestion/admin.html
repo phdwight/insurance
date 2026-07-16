@@ -50,6 +50,7 @@
   .uc-sub { color:var(--muted); font-size:.82rem; margin-top:2px; }
   .pill { flex:none; display:inline-flex; align-items:center; gap:7px; padding:6px 13px; border-radius:999px; font-size:.82rem; font-weight:600; }
   .pill.work { background:var(--accent-soft); color:var(--accent); }
+  .pill.queue { background:#e8effb; color:var(--blue); }
   .pill.done { background:#e3f0e8; color:var(--accent); }
   .pill.err { background:#fdecec; color:var(--red); }
 
@@ -365,7 +366,13 @@ async function startUpload(file) {
     u.sub.textContent = `${size} · parsing & extracting…`;
 
     const run = await pollRun(result.extraction_run_id, (secs, run) => {
-      setPill(u.pill, "work", `<span class="spin"></span>Working · ${secs}s`);
+      // A single worker processes runs in turn — a second upload waits in the
+      // queue. Say "Queued" (not "Working") until it's actually picked up, so the
+      // pill agrees with the step tracker instead of looking stuck.
+      const queued = run.status === "queued";
+      setPill(u.pill, queued ? "queue" : "work",
+        `<span class="spin"></span>${queued ? "Queued" : "Working"} · ${secs}s`);
+      u.sub.textContent = `${size} · ${queued ? "waiting in queue…" : "parsing & extracting…"}`;
       renderSteps(u.steps, run);
     });
     renderSteps(u.steps, run);
