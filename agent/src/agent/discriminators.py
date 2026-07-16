@@ -77,12 +77,17 @@ class Discriminator:
     keeps: Any  # (profile value, policy) -> bool
     kind: str = "text"  # UI input type: "choice" | "number" | "text"
     options: tuple[str, ...] | None = None  # tap answers; each must parse()
+    # Plain-language gloss per option, keyed by option label. Renders under the
+    # chip so a customer who doesn't know the jargon (VUL, endowment…) can still
+    # choose confidently. Optional — self-explanatory options omit it.
+    option_help: dict[str, str] | None = None
 
     def question_payload(self) -> dict:
         return {
             "text": self.question,
             "input_type": self.kind,
             "options": list(self.options) if self.options else None,
+            "option_help": self.option_help or None,
         }
 
 
@@ -201,6 +206,10 @@ REGISTRY: list[Discriminator] = [
         keeps=lambda plan, p: _cov(p, "plan_type") is None or _cov(p, "plan_type") == plan,
         kind="choice",
         options=("HMO", "Indemnity (reimbursement)"),
+        option_help={
+            "HMO": "Use the insurer's hospital network — cashless, nothing to file.",
+            "Indemnity (reimbursement)": "Pay first at any hospital, then claim the money back.",
+        },
     ),
     Discriminator(
         id="life.policy_type",
@@ -216,6 +225,12 @@ REGISTRY: list[Discriminator] = [
         or _cov(p, "policy_type") == kind,
         kind="choice",
         options=("Term", "Whole life", "VUL", "Endowment"),
+        option_help={
+            "Term": "Pure protection for a set number of years — lowest cost, no cash value.",
+            "Whole life": "Covers you for life and builds guaranteed cash value over time.",
+            "VUL": "Life cover plus investment funds — the value can grow or fall with the market.",
+            "Endowment": "Pays a lump sum on a set date, with life protection until then.",
+        },
     ),
     # Global: only asked when candidates actually differ on age eligibility.
     Discriminator(

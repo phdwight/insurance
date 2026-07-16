@@ -26,7 +26,7 @@ class AgentState(TypedDict, total=False):   # agent/state.py
     profile: dict                     # NeedsProfile.model_dump() (plain dict in state)
     pending_question: str | None      # question text awaiting an answer
     pending_disc: str | None          # discriminator id (or "budget") being asked
-    question: dict | None             # {text, input_type, options} for the UI
+    question: dict | None             # {text, input_type, options, option_help} for the UI
     asked: list[str]                  # discriminator ids already used
     questions_asked: int              # question budget tracking
     turn_count: int                   # total user turns (hard session cap, MAX_TURNS)
@@ -70,7 +70,7 @@ candidate set until a match (or an honest no-match) falls out.
 
 **match.** Runs *early*, with whatever partial profile exists — the catalog is consulted before questions are chosen, not after. Fetches full policy records per detected line in parallel.
 
-**decide (discriminator engine).** Deterministic, no LLM. Narrows candidates by every answer given so far (destination region, trip length, species, plan type, age band…), then scores each unanswered attribute by how evenly it splits the remaining candidates. The best splitter becomes the next question. Attributes all candidates agree on are never asked (if every travel policy covers COVID, the COVID question is pointless). Stops when a line is at ≤ 3 candidates, no discriminating attribute remains, or the question budget (5) is spent. Budget is the last-resort question since price always differs. An empty candidate set after narrowing is presented as an honest no-match — never a forced fit.
+**decide (discriminator engine).** Deterministic, no LLM. Narrows candidates by every answer given so far (destination region, trip length, species, plan type, age band…), then scores each unanswered attribute by how evenly it splits the remaining candidates. The best splitter becomes the next question. Attributes all candidates agree on are never asked (if every travel policy covers COVID, the COVID question is pointless). Stops when a line is at ≤ 3 candidates, no discriminating attribute remains, or the question budget (5) is spent. Budget is the last-resort question since price always differs. An empty candidate set after narrowing is presented as an honest no-match — never a forced fit. Choice questions whose options are industry jargon a customer may not know (life `policy_type`: term/whole/VUL/endowment; health `plan_type`: HMO/indemnity) carry an `option_help` gloss per option, rendered as a plain-language subtitle under each tap chip.
 
 **verify.** Guardrail node. Programmatically re-checks age eligibility and budget (normalized across premium frequencies) against actual policy fields. This is the anti-hallucination layer for *policy selection*.
 

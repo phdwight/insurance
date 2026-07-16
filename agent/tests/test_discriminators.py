@@ -93,6 +93,27 @@ def test_every_choice_option_parses_deterministically() -> None:
                 assert disc.parse(option) is not None, (disc.id, option)
         payload = disc.question_payload()
         assert payload["input_type"] in ("choice", "number", "text")
+        # Any plain-language gloss must key off a real option label and be
+        # non-empty, or it silently never renders on its chip.
+        if disc.option_help:
+            assert set(disc.option_help) <= set(disc.options or ()), disc.id
+            for label, gloss in disc.option_help.items():
+                assert gloss.strip(), (disc.id, label)
+            assert payload["option_help"] == disc.option_help
+
+
+def test_jargon_options_carry_plain_language_help() -> None:
+    """Insurance jargon a customer may not know must ship a plain-language gloss."""
+    from agent.discriminators import by_id
+
+    for disc_id, jargon in (
+        ("life.policy_type", ("Term", "Whole life", "VUL", "Endowment")),
+        ("health.plan_type", ("HMO", "Indemnity (reimbursement)")),
+    ):
+        disc = by_id(disc_id)
+        assert disc is not None and disc.option_help, disc_id
+        for term in jargon:
+            assert disc.option_help.get(term), (disc_id, term)
 
 
 def test_global_age_asked_only_if_eligibility_differs() -> None:

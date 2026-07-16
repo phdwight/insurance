@@ -78,6 +78,7 @@ export interface Question {
   text: string;
   input_type: "choice" | "number" | "text";
   options: string[] | null;
+  option_help?: Record<string, string> | null;
 }
 
 export interface AgentEvent {
