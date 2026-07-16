@@ -17,7 +17,7 @@ import re
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent import expl_cache, mcp_client, prompts
+from agent import economy, expl_cache, mcp_client, prompts
 from agent.discriminators import (
     MAX_QUESTIONS,
     TARGET_RESULTS,
@@ -30,7 +30,7 @@ from agent.discriminators import (
 from agent.llm import get_model, llm_available
 from agent.parsing import detect_product_lines
 from agent.state import AgentState
-from agent.verify import verify_candidates
+from agent.verify import deterministic_reasons, verify_candidates
 from shared import NeedsProfile, merge_profiles
 
 # Anti-loop guardrails (MAX_QUESTIONS caps the discriminator loop; these two
@@ -124,9 +124,11 @@ async def ingest(state: AgentState) -> dict:
         not pending and bool(detected) and len(text.split()) <= 2
     )
 
-    # Free-form extraction (also rescues unparsed guided answers) when a key exists.
+    # Free-form extraction (also rescues unparsed guided answers) when a key
+    # exists and the economy ladder allows LLM extraction.
     if (
         llm_available()
+        and economy.extractor_enabled()
         and not fully_answered
         and (state.get("mode") == "freeform" or not parsed)
     ):
@@ -300,11 +302,13 @@ async def explain(state: AgentState) -> dict:
     if not any(recommendations.values()):
         return {"messages": [AIMessage(content=prompts.NO_MATCH_MESSAGE)], "done": True}
 
+    use_writer = llm_available() and economy.writer_enabled()
+
     # Same profile answers + same policy versions = identical writer/panel
     # output — serve the cached, already-verified result and skip both LLMs.
     # (Cache errors read as a miss; the conversation never depends on it.)
     key = None
-    if llm_available() and expl_cache.enabled():
+    if use_writer and expl_cache.enabled():
         key = expl_cache.cache_key(state["profile"], recommendations)
         cached = await expl_cache.get(key)
         if cached is not None:
@@ -315,13 +319,19 @@ async def explain(state: AgentState) -> dict:
             }
 
     reason_map = (
-        await _explain_with_llm(state["profile"], recommendations) if llm_available() else {}
+        await _explain_with_llm(state["profile"], recommendations) if use_writer else {}
     )
+    profile = NeedsProfile(**state["profile"])
     for policies in recommendations.values():
         for policy in policies:
-            reasons = reason_map.get(policy["slug"]) or [
-                {"text": prompts.FALLBACK_REASON, "kind": "match"}
-            ]
+            # Writer prose when available; else deterministic template reasons
+            # rendered from verified fields (zero LLM, grounded by
+            # construction); else the generic fallback line.
+            reasons = (
+                reason_map.get(policy["slug"])
+                or deterministic_reasons(policy, profile)
+                or [{"text": prompts.FALLBACK_REASON, "kind": "match"}]
+            )
             policy["match_reasons"] = reasons
             # Strength is the writer's honest read: any surfaced gap → partial.
             # The verifier preserves gap reasons, so this stays consistent after
@@ -350,7 +360,10 @@ async def verify_explanations(state: AgentState) -> dict:
     recommendations = state.get("recommendations", {})
     if state.get("explanations_cached") or not any(recommendations.values()):
         return {}
-    if verifier.panel_enabled():
+    # The economy ladder can drop the panel (lean/deterministic) — safe by
+    # construction, since the panel only ever makes output stricter. The cache
+    # key carries the mode, so leaner results never masquerade as verified.
+    if verifier.panel_enabled() and economy.panel_enabled():
         recommendations = await verifier.verify_recommendations(recommendations)
     if key := state.get("expl_cache_key"):
         await expl_cache.put(key, recommendations)

@@ -109,6 +109,27 @@ NO_MATCH_MESSAGE = (
 
 FALLBACK_REASON = "Meets your stated criteria on record."
 
+# Deterministic explanation templates — the zero-LLM path (no provider key, or
+# LLM_ECONOMY=deterministic). Grounded by construction: every placeholder is
+# filled straight from verified policy fields or the user's own answers.
+DET_REASON_AGE = "At age {age}, you're within this plan's eligible range ({age_min}–{age_max})."
+DET_REASON_BUDGET = (
+    "Its minimum premium (₱{premium:,.0f} {frequency}) fits within your "
+    "budget of ₱{budget:,.0f}."
+)
+DET_REASON_ATTR = "Matches your preference — {attribute}: {value}."
+DET_REASON_FLAG = "Includes {attribute}."
+DET_GAP_ATTR = "This plan doesn't state {attribute}, which you asked about."
+
+# Premium-frequency wording for deterministic templates.
+FREQUENCY_LABELS = {
+    "monthly": "per month",
+    "quarterly": "per quarter",
+    "semi_annual": "every six months",
+    "annual": "per year",
+    "single": "one-time",
+}
+
 DISCLAIMER = (
     "This is information, not insurance advice — confirm final terms with the insurer."
 )

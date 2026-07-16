@@ -51,7 +51,7 @@ def cache_key(profile: dict, recommendations: dict) -> str:
 
     Computed over the recommendations BEFORE reasons are attached (the verified
     facts), so a hit can skip the writer and the judge panel entirely."""
-    from agent import verifier
+    from agent import economy, verifier
     from agent.config import LLM_MODEL_LARGE_1
     from agent.prompts import EXPLAIN_SYSTEM, JUDGE_SYSTEM
 
@@ -60,6 +60,9 @@ def cache_key(profile: dict, recommendations: dict) -> str:
             "writer": LLM_MODEL_LARGE_1,
             "judges": sorted(verifier.judge_models()),
             "prompts": [EXPLAIN_SYSTEM, JUDGE_SYSTEM],
+            # Results produced under a leaner economy mode (e.g. panel skipped)
+            # live under their own keys — never served as fully-verified ones.
+            "economy": economy.mode(),
             "profile": profile,
             "recommendations": recommendations,
         },
