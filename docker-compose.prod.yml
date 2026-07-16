@@ -157,6 +157,8 @@ services:
     environment:
       <<: [*app-env, *langsmith-env, *llm-models]
       VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      EXPLANATION_CACHE: ${EXPLANATION_CACHE:-auto}
+      EXPLANATION_CACHE_TTL_DAYS: ${EXPLANATION_CACHE_TTL_DAYS:-30}
       MCP_SERVER_URL: http://mcp-server:8002/mcp
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

@@ -16,7 +16,7 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent import mcp_client, prompts
+from agent import expl_cache, mcp_client, prompts
 from agent.discriminators import (
     MAX_QUESTIONS,
     TARGET_RESULTS,
@@ -260,6 +260,20 @@ async def explain(state: AgentState) -> dict:
     if not any(recommendations.values()):
         return {"messages": [AIMessage(content=prompts.NO_MATCH_MESSAGE)], "done": True}
 
+    # Same profile answers + same policy versions = identical writer/panel
+    # output — serve the cached, already-verified result and skip both LLMs.
+    # (Cache errors read as a miss; the conversation never depends on it.)
+    key = None
+    if llm_available() and expl_cache.enabled():
+        key = expl_cache.cache_key(state["profile"], recommendations)
+        cached = await expl_cache.get(key)
+        if cached is not None:
+            return {
+                "recommendations": cached,
+                "expl_cache_key": key,
+                "explanations_cached": True,
+            }
+
     reason_map = (
         await _explain_with_llm(state["profile"], recommendations) if llm_available() else {}
     )
@@ -276,20 +290,31 @@ async def explain(state: AgentState) -> dict:
                 "partial" if any(reason["kind"] == "gap" for reason in reasons) else "strong"
             )
 
-    return {"recommendations": recommendations}
+    return {
+        "recommendations": recommendations,
+        "expl_cache_key": key,
+        "explanations_cached": False,
+    }
 
 
 async def verify_explanations(state: AgentState) -> dict:
     """Multi-LLM panel: drop match reasons not unanimously grounded.
 
-    Skipped (no-op) unless VERIFIER_MODELS configures at least two judges.
+    Skipped (no-op) unless VERIFIER_MODELS configures at least two judges, or
+    when explain served a cache hit (the cached payload is already verified).
+    After the panel, the final result is stored in the explanation cache so the
+    next user in the same outcome bucket skips the writer AND the panel.
     """
     from agent import verifier
 
     recommendations = state.get("recommendations", {})
-    if not verifier.panel_enabled() or not any(recommendations.values()):
+    if state.get("explanations_cached") or not any(recommendations.values()):
         return {}
-    return {"recommendations": await verifier.verify_recommendations(recommendations)}
+    if verifier.panel_enabled():
+        recommendations = await verifier.verify_recommendations(recommendations)
+    if key := state.get("expl_cache_key"):
+        await expl_cache.put(key, recommendations)
+    return {"recommendations": recommendations}
 
 
 def present(state: AgentState) -> dict:

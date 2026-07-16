@@ -61,12 +61,17 @@ async def retention_loop(dsn: str) -> None:
     retried next round — retention must never take the service down."""
     import psycopg
 
+    from agent import expl_cache
+
     while True:
         try:
             async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
                 purged = await purge_stale_sessions(conn, session_ttl_days())
                 if purged:
                     logger.info("retention: purged %d stale session(s)", purged)
+                stale = await expl_cache.purge_stale(conn, expl_cache.cache_ttl_days())
+                if stale:
+                    logger.info("retention: purged %d stale cached explanation(s)", stale)
         except Exception:
             logger.warning("retention pass failed; will retry", exc_info=True)
         await asyncio.sleep(retention_interval_seconds())

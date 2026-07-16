@@ -17,4 +17,6 @@ class AgentState(TypedDict, total=False):
     bootstrap_count: int  # times we've asked "what to protect" (capped)
     candidates: dict[str, list[dict[str, Any]]]  # line -> search results
     recommendations: dict[str, list[dict[str, Any]]]  # line -> verified + explained
+    expl_cache_key: str | None  # content hash of (models, prompts, profile, facts)
+    explanations_cached: bool  # hit — writer & judge panel were skipped this turn
     done: bool
