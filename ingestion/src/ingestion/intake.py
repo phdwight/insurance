@@ -1,24 +1,25 @@
-"""Intake gate: one frontier-model pass over a parsed document that (1) rejects
+"""Intake gate: one mid-tier-model pass over a parsed document that (1) rejects
 non-insurance uploads and (2) redacts personal identifying information (PII)
 before anything is extracted or stored.
 
-Runs on the document text after parsing/vision, using the large ``LLM_MODEL``
-(good judgment for classification + thorough redaction). Gated by ``INTAKE_GATE``
-and the presence of an LLM key; without a key it degrades to a pass-through
-(accept, no redaction) so the pipeline still works keyless in local dev.
+Runs on the document text after parsing/vision, using the mid tier
+(``LLM_MODEL_MID_1``; good judgment for classification + thorough redaction).
+Gated by ``INTAKE_GATE`` and the presence of an LLM key; without a key it degrades
+to a pass-through (accept, no redaction) so the pipeline still works keyless.
 """
 
 import os
 
 from langchain.chat_models import init_chat_model
 
+from ingestion import models
 from ingestion.prompts import INTAKE_SYSTEM, DocumentIntake
 
 INTAKE_MAX_CHARS = 60_000  # bound the prompt for very long documents
 
 
 def _model_name() -> str:
-    return os.environ.get("LLM_MODEL", "anthropic:claude-sonnet-4-5")
+    return models.mid()
 
 
 def _llm_available() -> bool:

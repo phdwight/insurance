@@ -10,6 +10,7 @@ import os
 from langchain.chat_models import init_chat_model
 from pydantic import ValidationError
 
+from ingestion import models
 from ingestion.prompts import EXTRACT_POLICY_SYSTEM, PolicyDraft, policy_draft_schema
 
 MAX_DOCUMENT_CHARS = 60_000  # keep prompts bounded for very long brochures
@@ -20,7 +21,7 @@ def _llm_available() -> bool:
 
 
 def _model_name() -> str:
-    return os.environ.get("LLM_MODEL_SMALL", "anthropic:claude-haiku-4-5")
+    return models.small()
 
 
 async def extract_draft(document_text: str) -> tuple[dict | None, str, str]:

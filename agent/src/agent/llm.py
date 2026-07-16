@@ -1,11 +1,19 @@
-"""Provider-agnostic chat models (config via LLM_MODEL / LLM_MODEL_SMALL)."""
+"""Provider-agnostic chat models (config via the tiered LLM_MODEL_* slots)."""
 
 import os
 from functools import lru_cache
 
 from langchain.chat_models import init_chat_model
 
-from agent.config import LLM_MODEL, LLM_MODEL_SMALL
+from agent.config import LLM_MODEL_LARGE_1, LLM_MODEL_MID_1, LLM_MODEL_SMALL_1
+
+# Active model per tier. Roles ask for a tier, not a model, so swapping a slot in
+# config (or its env var) re-points every role on that tier at once.
+_TIER_MODELS = {
+    "large": LLM_MODEL_LARGE_1,
+    "mid": LLM_MODEL_MID_1,
+    "small": LLM_MODEL_SMALL_1,
+}
 
 
 def llm_available() -> bool:
@@ -27,6 +35,7 @@ def chat_model(model: str, **kwargs):
     return init_chat_model(model, **kwargs)
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def get_model(size: str = "large"):
-    return chat_model(LLM_MODEL_SMALL if size == "small" else LLM_MODEL)
+    """A chat model for a tier: "large" (writer), "mid", or "small" (extractor)."""
+    return chat_model(_TIER_MODELS.get(size, LLM_MODEL_LARGE_1))

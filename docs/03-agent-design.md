@@ -82,7 +82,7 @@ candidate set until a match (or an honest no-match) falls out.
 
 ## Model configuration
 
-Models are provider-agnostic `init_chat_model` strings: writer = frontier `LLM_MODEL`, extractor = small `LLM_MODEL_SMALL`, judges = `VERIFIER_MODELS` (≥2, cross-provider). Two provider-specific details are load-bearing:
+Models are provider-agnostic `init_chat_model` strings, chosen from a 6-model roster of 3 tiers (2 each; `agent/config.py` resolves each tier's `_1` slot, with legacy `LLM_MODEL`/`LLM_MODEL_SMALL` as the large/small fallback). This package uses writer = **large** (`LLM_MODEL_LARGE_1`), extractor = **small** (`LLM_MODEL_SMALL_1`); judges = `VERIFIER_MODELS` (≥2, cross-provider). The **mid** tier drives ingestion (vision/intake/correction). Two provider-specific details are load-bearing:
 
 - **OpenAI models are routed through the Responses API** (`chat_model()` in `agent/llm.py` sets `use_responses_api=True`). OpenAI reasoning models (gpt-5.x) reject **function tools together with `reasoning_effort`** on `/v1/chat/completions` — and "function tools" includes `with_structured_output(method="function_calling")`. The Responses API supports both, so every OpenAI call site (writer, extractor, judges) inherits the fix. Other providers are untouched.
 - **The extractor forces `method="function_calling"`** for `NeedsProfile` because its `per_line` is an **open-ended map**, which OpenAI's strict `json_schema` mode can't express (it demands `additionalProperties:false` everywhere). That's exactly why the Responses API routing above matters — otherwise a reasoning model would 400 on the first turn.
