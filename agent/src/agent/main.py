@@ -113,3 +113,14 @@ async def chat(request: ChatRequest) -> StreamingResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
+
+
+@app.get("/ops/usage")
+async def ops_usage(days: int = 7) -> dict:
+    """LLM spend ledger: per-day tokens by model and role, cache hits (zero-
+    token rows), and today's DAILY_TOKEN_BUDGET status. Aggregate counts only —
+    no conversation content. The agent is not published in production (compose-
+    network internal), so this stays as open as /health."""
+    from agent import usage
+
+    return await usage.summary(days=max(1, min(days, 90)))

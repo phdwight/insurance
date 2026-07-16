@@ -17,7 +17,7 @@ import re
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent import economy, expl_cache, mcp_client, prompts
+from agent import economy, expl_cache, mcp_client, prompts, usage
 from agent.discriminators import (
     MAX_QUESTIONS,
     TARGET_RESULTS,
@@ -98,9 +98,12 @@ async def _extract_with_llm(profile: NeedsProfile, text: str) -> NeedsProfile:
     extractor = get_model("small").with_structured_output(
         NeedsProfile, method="function_calling"
     )
+    meter = usage.tracker()
     update = await extractor.ainvoke(
-        [("system", prompts.EXTRACT_SYSTEM), ("human", text or "(empty message)")]
+        [("system", prompts.EXTRACT_SYSTEM), ("human", text or "(empty message)")],
+        config={"callbacks": [meter]},
     )
+    await usage.record("extractor", meter.usage_metadata)
     return merge_profiles(profile, update)
 
 
@@ -291,9 +294,12 @@ async def _explain_with_llm(profile: dict, recommendations: dict) -> dict[str, l
         },
     }
     writer = get_model("large").with_structured_output(prompts.ExplanationOutput)
+    meter = usage.tracker()
     result = await writer.ainvoke(
-        [("system", prompts.EXPLAIN_SYSTEM), ("human", json.dumps(payload, default=str))]
+        [("system", prompts.EXPLAIN_SYSTEM), ("human", json.dumps(payload, default=str))],
+        config={"callbacks": [meter]},
     )
+    await usage.record("writer", meter.usage_metadata)
     return {item.slug: [reason.model_dump() for reason in item.reasons] for item in result.items}
 
 
@@ -312,6 +318,8 @@ async def explain(state: AgentState) -> dict:
         key = expl_cache.cache_key(state["profile"], recommendations)
         cached = await expl_cache.get(key)
         if cached is not None:
+            # Zero-token ledger event: avoided spend stays visible in /ops/usage.
+            await usage.record_event("explain_cache_hit")
             return {
                 "recommendations": cached,
                 "expl_cache_key": key,

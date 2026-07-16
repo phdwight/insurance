@@ -159,6 +159,7 @@ services:
       <<: [*app-env, *langsmith-env, *llm-models]
       VERIFIER_MODELS: ${VERIFIER_MODELS:-}
       LLM_ECONOMY: ${LLM_ECONOMY:-full}
+      DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-0}
       EXPLANATION_CACHE: ${EXPLANATION_CACHE:-auto}
       EXPLANATION_CACHE_TTL_DAYS: ${EXPLANATION_CACHE_TTL_DAYS:-30}
       MCP_SERVER_URL: http://mcp-server:8002/mcp

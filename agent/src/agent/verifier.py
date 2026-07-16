@@ -47,8 +47,14 @@ async def _judge_policy(model_name: str, policy_facts: dict, claims: list[str]) 
     try:
         # Construction inside the try: a bad model string or provider init
         # error must reject, not crash the turn.
+        from agent import usage
+
         judge = chat_model(model_name).with_structured_output(JudgePanelVerdicts)
-        verdict = await judge.ainvoke([("system", JUDGE_SYSTEM), ("human", prompt)])
+        meter = usage.tracker()
+        verdict = await judge.ainvoke(
+            [("system", JUDGE_SYSTEM), ("human", prompt)], config={"callbacks": [meter]}
+        )
+        await usage.record("judge", meter.usage_metadata)
         if len(verdict.grounded) != len(claims):
             return [False] * len(claims)  # misaligned output — fail closed
         return list(verdict.grounded)
