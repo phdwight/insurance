@@ -33,18 +33,26 @@ async def lifespan(app: FastAPI):
     if database_url:
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-        # psycopg URL (checkpointer doesn't use SQLAlchemy)
+        from agent import db
+
+        # psycopg URL (checkpointer doesn't use SQLAlchemy). The checkpointer
+        # rides the shared pool — a single connection would serialize every
+        # concurrent conversation's state I/O (see agent/db.py).
         _dsn = database_url.replace("postgresql+psycopg://", "postgresql://")
-        async with AsyncPostgresSaver.from_conn_string(_dsn) as saver:
+        pool = await db.open_pool(_dsn)
+        try:
+            saver = AsyncPostgresSaver(pool)
             await saver.setup()
             _graph = build_graph(checkpointer=saver)
-            purger = asyncio.create_task(retention.retention_loop(_dsn))
+            purger = asyncio.create_task(retention.retention_loop())
             try:
                 yield
             finally:
                 purger.cancel()
                 with suppress(asyncio.CancelledError):
                     await purger
+        finally:
+            await db.close_pool()
     else:
         from langgraph.checkpoint.memory import MemorySaver
 
@@ -73,7 +81,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     config = {"configurable": {"thread_id": request.session_id}, "recursion_limit": 15}
     if _dsn:  # retention bookkeeping, off the request's critical path
         asyncio.get_running_loop().create_task(
-            retention.record_activity(_dsn, request.session_id)
+            retention.record_activity(request.session_id)
         )
     graph_input = {
         "messages": [HumanMessage(content=request.message)],

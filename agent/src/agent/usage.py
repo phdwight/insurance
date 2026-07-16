@@ -20,8 +20,6 @@ from typing import Any
 
 logger = logging.getLogger("agent")
 
-CONNECT_TIMEOUT_SECONDS = 3
-
 _warned_days: set[str] = set()  # budget warning fires once per process per day
 
 
@@ -66,15 +64,12 @@ async def record_event(role: str, model: str = "-") -> None:
 
 
 async def _write(rows: list[tuple[str, str, int, int]]) -> None:
-    import psycopg
+    from agent import db
 
-    dsn = _dsn()
-    if dsn is None:
+    if _dsn() is None:
         return
     try:
-        async with await psycopg.AsyncConnection.connect(
-            dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT_SECONDS
-        ) as conn:
+        async with db.connection() as conn:
             for model, role, input_tokens, output_tokens in rows:
                 await conn.execute(
                     "INSERT INTO app.llm_usage (day, model, role, calls, input_tokens,"
@@ -90,22 +85,19 @@ async def _write(rows: list[tuple[str, str, int, int]]) -> None:
 
 
 async def _today_total() -> int | None:
-    import psycopg
+    from agent import db
 
-    dsn = _dsn()
-    if dsn is None:
+    if _dsn() is None:
         return None
     try:
-        async with await psycopg.AsyncConnection.connect(
-            dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT_SECONDS
-        ) as conn:
+        async with db.connection() as conn:
             row = await (
                 await conn.execute(
-                    "SELECT coalesce(sum(input_tokens + output_tokens), 0),"
-                    " current_date::text FROM app.llm_usage WHERE day = current_date"
+                    "SELECT coalesce(sum(input_tokens + output_tokens), 0) AS total"
+                    " FROM app.llm_usage WHERE day = current_date"
                 )
             ).fetchone()
-            return int(row[0]) if row else None
+            return int(row["total"]) if row else None
     except Exception:
         return None
 
@@ -132,17 +124,14 @@ async def _check_budget() -> None:
 
 async def summary(days: int = 7) -> dict[str, Any]:
     """Ledger for the ops endpoint: per-day rows plus today's budget status."""
-    import psycopg
+    from agent import db
 
-    dsn = _dsn()
-    if dsn is None:
+    if _dsn() is None:
         return {"rows": [], "budget": daily_token_budget(), "today_total": 0}
-    async with await psycopg.AsyncConnection.connect(
-        dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT_SECONDS
-    ) as conn:
+    async with db.connection() as conn:
         rows = await (
             await conn.execute(
-                "SELECT day::text, model, role, calls, input_tokens, output_tokens"
+                "SELECT day::text AS day, model, role, calls, input_tokens, output_tokens"
                 " FROM app.llm_usage WHERE day > current_date - %s"
                 " ORDER BY day DESC, model, role",
                 (days,),
@@ -150,22 +139,12 @@ async def summary(days: int = 7) -> dict[str, Any]:
         ).fetchall()
         today_row = await (
             await conn.execute(
-                "SELECT coalesce(sum(input_tokens + output_tokens), 0)"
+                "SELECT coalesce(sum(input_tokens + output_tokens), 0) AS total"
                 " FROM app.llm_usage WHERE day = current_date"
             )
         ).fetchone()
-    ledger = [
-        {
-            "day": day,
-            "model": model,
-            "role": role,
-            "calls": calls,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        }
-        for day, model, role, calls, input_tokens, output_tokens in rows
-    ]
-    today_total = int(today_row[0]) if today_row else 0
+    ledger = [dict(row) for row in rows]
+    today_total = int(today_row["total"]) if today_row else 0
     budget = daily_token_budget()
     return {
         "rows": ledger,

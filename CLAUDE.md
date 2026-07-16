@@ -46,6 +46,7 @@ Product and process decisions made by the project owner across sessions. Don't r
 
 ### Architecture & stack
 - **Monorepo** (single repo, uv workspace + npm PWA); split only on a concrete trigger.
+- **Scaling posture lives in `docs/06-scaling.md`** — poured slabs (stateless-over-Postgres, shared agent DB pool `agent/db.py`, catalog TTL cache in `agent/mcp_client.py`, queue-scaled ingestion) and the trigger table for each next step (replicas, distributed limiter, pgbouncer, object storage). Don't build past a trigger before it fires; when adding agent DB access, go through `db.connection()` (pooled, dict rows).
 - **Stack:** Postgres + pgvector, LangGraph, FastAPI, React/Vite PWA, MCP boundary between agent and catalog.
 - **Python floor: >= 3.14** (owner decision; Docker/CI run 3.14).
 - **Embeddings: voyage-3.5 @ 1024 dims** (`vector(1024)`); optional — search falls back to SQL ranking without a key.

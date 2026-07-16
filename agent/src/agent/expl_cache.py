@@ -28,9 +28,6 @@ import os
 
 logger = logging.getLogger("agent")
 
-CONNECT_TIMEOUT_SECONDS = 3  # a slow cache must not stall the chat
-
-
 def _dsn() -> str | None:
     url = os.environ.get("DATABASE_URL")
     return url.replace("postgresql+psycopg://", "postgresql://") if url else None
@@ -75,15 +72,12 @@ def cache_key(profile: dict, recommendations: dict) -> str:
 
 async def get(key: str) -> dict | None:
     """Cached recommendations for the key, or None. Marks the row used."""
-    import psycopg
+    from agent import db
 
-    dsn = _dsn()
-    if dsn is None:
+    if _dsn() is None:
         return None
     try:
-        async with await psycopg.AsyncConnection.connect(
-            dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT_SECONDS
-        ) as conn:
+        async with db.connection() as conn:
             row = await (
                 await conn.execute(
                     "UPDATE app.explanation_cache SET last_used = now() "
@@ -91,7 +85,7 @@ async def get(key: str) -> dict | None:
                     (key,),
                 )
             ).fetchone()
-            return row[0] if row else None
+            return row["payload"] if row else None
     except Exception:
         logger.warning("explanation cache read failed; treating as miss", exc_info=True)
         return None
@@ -99,16 +93,14 @@ async def get(key: str) -> dict | None:
 
 async def put(key: str, recommendations: dict) -> None:
     """Store the final (panel-verified) recommendations. Best-effort."""
-    import psycopg
     from psycopg.types.json import Json
 
-    dsn = _dsn()
-    if dsn is None:
+    from agent import db
+
+    if _dsn() is None:
         return
     try:
-        async with await psycopg.AsyncConnection.connect(
-            dsn, autocommit=True, connect_timeout=CONNECT_TIMEOUT_SECONDS
-        ) as conn:
+        async with db.connection() as conn:
             await conn.execute(
                 "INSERT INTO app.explanation_cache (cache_key, payload) "
                 "VALUES (%s, %s) ON CONFLICT (cache_key) DO NOTHING",

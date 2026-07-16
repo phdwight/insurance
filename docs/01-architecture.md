@@ -37,8 +37,8 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 
 **LangGraph Agent Service**
 - Hosts the recommendation graph (see `03-agent-design.md`)
-- Connects to the MCP server as an MCP *client*
-- Persists conversation/graph state via LangGraph Postgres checkpointer
+- Connects to the MCP server as an MCP *client* — read-only catalog calls are memoized for `CATALOG_CACHE_SECONDS` (60s default) so per-turn re-narrowing doesn't re-pay the MCP round-trips
+- Persists conversation/graph state via LangGraph Postgres checkpointer, riding a shared connection pool (`agent/db.py`, `AGENT_DB_POOL_SIZE`) together with the explanation cache, usage ledger, and retention (scaling posture: `06-scaling.md`)
 
 **App database (Postgres, `app` schema)**
 - Sessions, conversation checkpoints, extracted user-needs profiles, recommendation snapshots (for shareable results)
