@@ -44,10 +44,16 @@ export default function App() {
           ]);
         }
       });
-    } catch {
+    } catch (error) {
+      const rateLimited = error instanceof Error && error.message.includes("429");
       setMessages((current) => [
         ...current,
-        { role: "agent", text: "Couldn't reach the service. Check your connection and retry." },
+        {
+          role: "agent",
+          text: rateLimited
+            ? "You're sending messages very quickly — please wait a moment and try again."
+            : "Couldn't reach the service. Check your connection and retry.",
+        },
       ]);
     } finally {
       setBusy(false);

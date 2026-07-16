@@ -33,7 +33,7 @@ Both parts can live in one Postgres instance (separate schemas: `app`, `catalog`
 **API Gateway (FastAPI or similar Python service)**
 - Auth (anonymous sessions for MVP; optional accounts later)
 - Streams agent responses to the PWA via SSE/WebSocket
-- Rate limiting, input validation
+- Rate limiting, input validation — `/chat` (the only token-spending endpoint) has a per-client sliding window (`RATE_LIMIT_CHAT`, default 30/60s, keyed by first `X-Forwarded-For` hop else peer IP; 429 over limit, `off` disables)
 
 **LangGraph Agent Service**
 - Hosts the recommendation graph (see `03-agent-design.md`)

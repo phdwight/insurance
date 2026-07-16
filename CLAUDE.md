@@ -57,6 +57,7 @@ Product and process decisions made by the project owner across sessions. Don't r
 
 ### Security & retention
 - **Ingestion data surface is token-gated** (`ADMIN_TOKEN`, constant-time compare, bearer or `?token=`); `/health` and the data-free `/admin` shell stay open. Empty token = open = local dev only. New ingestion endpoints must take the `Protected` dependency. **Exception: the public brochure endpoints** (`GET /policies/{slug}/brochure` cover image, `GET /policies/{slug}/document`) are intentionally un-gated so end users can see brochures in results — but they serve a file **only** when the policy is published AND its source doc_type is `brochure`/`product_summary` (`PUBLIC_DOC_TYPES`); a `policy_contract` (possible PII) or unpublished/unknown slug 404s. Any new public file endpoint must apply the same eligibility gate.
+- **/chat is rate-limited at the API gateway** (`RATE_LIMIT_CHAT`, default 30 requests/60s per client IP via first `X-Forwarded-For` hop; `off` disables) — it's the only endpoint that can spend LLM tokens. In-memory per-process by design; a distributed limiter is a scale trigger. Over-limit returns 429 with a human message the PWA surfaces.
 - **Conversation retention:** `app.sessions` tracks last-seen per thread; an hourly agent task purges checkpoint rows idle past `SESSION_TTL_DAYS` (default 30) — DPA minimization, not a conversation timeout. The same task purges explanation-cache rows unused past `EXPLANATION_CACHE_TTL_DAYS`. Retention failures log and retry; they never take the service down.
 
 ### Process
