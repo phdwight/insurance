@@ -20,7 +20,7 @@ import os
 from typing import Any
 
 from agent.llm import chat_model
-from agent.prompts import FALLBACK_REASON, JUDGE_SYSTEM, JudgeVerdict
+from agent.prompts import FALLBACK_REASON, JUDGE_SYSTEM, JudgePanelVerdicts
 
 __all__ = ["FALLBACK_REASON", "judge_models", "panel_enabled", "verify_recommendations"]
 
@@ -34,16 +34,32 @@ def panel_enabled() -> bool:
     return len(judge_models()) >= 2
 
 
-async def _judge_one(model_name: str, policy_facts: dict, claim: str) -> bool:
-    judge = chat_model(model_name).with_structured_output(JudgeVerdict)
-    prompt = f"POLICY DATA:\n{json.dumps(policy_facts, default=str)}\n\nCLAIM:\n{claim}"
+async def _judge_policy(model_name: str, policy_facts: dict, claims: list[str]) -> list[bool]:
+    """One batched call: judge every claim against the same policy facts.
+
+    The facts JSON (the bulk of the prompt) is sent once per judge instead of
+    once per (judge, claim) — token cost and call count drop from N×J to J per
+    policy. A failed or misaligned response rejects every claim (fail closed):
+    a failing judge must not take the product down; unanimity then falls back
+    to the generic reason."""
+    numbered = "\n".join(f"{i + 1}. {claim}" for i, claim in enumerate(claims))
+    prompt = f"POLICY DATA:\n{json.dumps(policy_facts, default=str)}\n\nCLAIMS:\n{numbered}"
     try:
-        verdict = await judge.ainvoke([("system", JUDGE_SYSTEM), ("human", prompt)])
-        return verdict.grounded
+        # Construction inside the try: a bad model string or provider init
+        # error must reject, not crash the turn.
+        from agent import usage
+
+        judge = chat_model(model_name).with_structured_output(JudgePanelVerdicts)
+        meter = usage.tracker()
+        verdict = await judge.ainvoke(
+            [("system", JUDGE_SYSTEM), ("human", prompt)], config={"callbacks": [meter]}
+        )
+        await usage.record("judge", meter.usage_metadata)
+        if len(verdict.grounded) != len(claims):
+            return [False] * len(claims)  # misaligned output — fail closed
+        return list(verdict.grounded)
     except Exception:
-        # A failing judge must not take the product down; treat as "no vote"
-        # by rejecting — unanimity then falls back to the generic reason.
-        return False
+        return [False] * len(claims)
 
 
 async def verify_reasons(policy: dict[str, Any]) -> dict[str, Any]:
@@ -63,12 +79,14 @@ async def verify_reasons(policy: dict[str, Any]) -> dict[str, Any]:
     }
     models = judge_models()
 
-    async def grounded(text: str) -> bool:
-        votes = await asyncio.gather(*(_judge_one(m, facts, text) for m in models))
-        return all(votes)
-
     matches = [reason for reason in reasons if reason.get("kind") != "gap"]
-    keep_flags = await asyncio.gather(*(grounded(reason["text"]) for reason in matches))
+    keep_flags: list[bool] = []
+    if matches:
+        claims = [reason["text"] for reason in matches]
+        # One batched call per judge; a reason survives only if every judge
+        # independently grounds it (unanimity per reason, as before).
+        votes = await asyncio.gather(*(_judge_policy(m, facts, claims) for m in models))
+        keep_flags = [all(vote[i] for vote in votes) for i in range(len(claims))]
 
     kept: list[dict[str, Any]] = []
     match_index = 0

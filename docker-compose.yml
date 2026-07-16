@@ -1,3 +1,16 @@
+# 6-model roster (2 per tier), forwarded to every LLM service. Values are left
+# empty here — the app owns the tier defaults and the legacy LLM_MODEL /
+# LLM_MODEL_SMALL fallback (see .env.example). Set any of these in your .env.
+x-llm-models: &llm-models
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-}
+  LLM_MODEL_LARGE_1: ${LLM_MODEL_LARGE_1:-}
+  LLM_MODEL_LARGE_2: ${LLM_MODEL_LARGE_2:-}
+  LLM_MODEL_MID_1: ${LLM_MODEL_MID_1:-}
+  LLM_MODEL_MID_2: ${LLM_MODEL_MID_2:-}
+  LLM_MODEL_SMALL_1: ${LLM_MODEL_SMALL_1:-}
+  LLM_MODEL_SMALL_2: ${LLM_MODEL_SMALL_2:-}
+
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -42,6 +55,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       AGENT_URL: http://agent:8001
       MCP_HTTP_URL: http://mcp-server:8002
+      RATE_LIMIT_CHAT: ${RATE_LIMIT_CHAT:-30/60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     ports:
       - "8000:8000"
@@ -57,10 +71,15 @@ services:
         SERVICE: agent
     command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001", "--log-config", "log_config.yaml"]
     environment:
+      <<: *llm-models
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
       VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      LLM_ECONOMY: ${LLM_ECONOMY:-full}
+      DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-0}
+      AGENT_DB_POOL_SIZE: ${AGENT_DB_POOL_SIZE:-10}
+      CATALOG_CACHE_SECONDS: ${CATALOG_CACHE_SECONDS:-60}
+      EXPLANATION_CACHE: ${EXPLANATION_CACHE:-auto}
+      EXPLANATION_CACHE_TTL_DAYS: ${EXPLANATION_CACHE_TTL_DAYS:-30}
       MCP_SERVER_URL: http://mcp-server:8002/mcp
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -106,10 +125,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       DOCS_DIR: /data/uploads
-      # Frontier model — the approve auto-correction pass re-reads the document
+      # Mid tier — the approve auto-correction pass re-reads the document
       # visually to repair a draft that failed validation.
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      <<: *llm-models
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
@@ -136,8 +154,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://insurance:insurance@postgres:5432/insurance}
       DOCS_DIR: /data/uploads
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      <<: *llm-models
       VISION_TRIAGE: ${VISION_TRIAGE:-auto}
       INTAKE_GATE: ${INTAKE_GATE:-auto}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

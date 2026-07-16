@@ -5,9 +5,11 @@
 """
 
 import os
+import time
+from collections import deque
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -15,6 +17,59 @@ from pydantic import BaseModel, Field
 AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8001")
 MCP_HTTP_URL = os.environ.get("MCP_HTTP_URL", "http://localhost:8002")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+
+# --- /chat rate limit --------------------------------------------------------
+# /chat is the only endpoint that can spend LLM tokens, so it gets a per-client
+# sliding window (a human sends a few messages a minute; a script hammering it
+# is token burn). In-memory and per-process by design — one uvicorn worker per
+# container here; a shared/distributed limiter is a scale trigger, not an MVP
+# need. RATE_LIMIT_CHAT="30/60" = 30 requests per 60s per client; "off" disables.
+
+RATE_LIMIT_MESSAGE = "You're sending messages very quickly — please wait a moment and try again."
+_MAX_TRACKED_CLIENTS = 10_000  # bound memory if someone rotates addresses
+
+_windows: dict[str, deque] = {}
+
+
+def _rate_config() -> tuple[int, float] | None:
+    raw = os.environ.get("RATE_LIMIT_CHAT", "30/60").strip().lower()
+    if raw in ("", "off", "0", "false", "none"):
+        return None
+    try:
+        count, seconds = raw.split("/")
+        return max(1, int(count)), max(1.0, float(seconds))
+    except ValueError:
+        return 30, 60.0  # malformed config: fall back to the default, never open
+
+
+def _client_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:  # first hop = the original client when behind a proxy
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _allow_chat(request: Request) -> bool:
+    config = _rate_config()
+    if config is None:
+        return True
+    limit, window_seconds = config
+    now = time.monotonic()
+    key = _client_key(request)
+    window = _windows.get(key)
+    if window is None:
+        if len(_windows) >= _MAX_TRACKED_CLIENTS:
+            # Opportunistic sweep of idle clients before tracking a new one.
+            cutoff = now - window_seconds
+            for stale_key in [k for k, w in _windows.items() if not w or w[0] < cutoff]:
+                _windows.pop(stale_key, None)
+        window = _windows.setdefault(key, deque())
+    while window and window[0] < now - window_seconds:
+        window.popleft()
+    if len(window) >= limit:
+        return False
+    window.append(now)
+    return True
 
 app = FastAPI(title="Insurance API Gateway")
 app.add_middleware(
@@ -58,7 +113,10 @@ async def compare(slugs: str) -> dict:
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest) -> StreamingResponse:
+async def chat(request: ChatRequest, raw_request: Request) -> StreamingResponse:
+    if not _allow_chat(raw_request):
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_MESSAGE)
+
     async def stream():
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(

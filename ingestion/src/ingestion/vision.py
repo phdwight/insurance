@@ -1,12 +1,12 @@
-"""Vision triage: the large model looks at a PDF's pages and either transcribes
+"""Vision triage: the mid-tier model looks at a PDF's pages and either transcribes
 them to Markdown itself (image-heavy / scanned docs a text parser would mangle)
 or routes to docling (clean digital text + tables).
 
 Pages are rendered with pypdfium2 (already a docling dependency), so this adds
-no new packages and stays provider-agnostic via ``init_chat_model``. The model
-is the frontier ``LLM_MODEL``. Any failure degrades to docling so an upload is
-never lost. Enabled by default when an LLM key is present; ``VISION_TRIAGE=false``
-forces every PDF straight to docling.
+no new packages and stays provider-agnostic via ``init_chat_model``. The model is
+the mid tier (``LLM_MODEL_MID_1``; see ingestion/models.py). Any failure degrades
+to docling so an upload is never lost. Enabled by default when an LLM key is
+present; ``VISION_TRIAGE=false`` forces every PDF straight to docling.
 """
 
 import base64
@@ -19,6 +19,7 @@ import anyio
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
+from ingestion import models
 from ingestion.prompts import (
     VISION_TRANSCRIBE_SYSTEM,
     VISION_TRIAGE_SYSTEM,
@@ -29,7 +30,7 @@ logger = logging.getLogger("ingestion")
 
 
 def _model_name() -> str:
-    return os.environ.get("LLM_MODEL", "anthropic:claude-sonnet-4-5")
+    return models.mid()
 
 
 def _llm_available() -> bool:

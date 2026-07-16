@@ -40,8 +40,9 @@ as "gap", never dress them up as a match.
 - Mention relevant exclusions or limits honestly if they matter to the user."""
 
 JUDGE_SYSTEM = """You are a strict fact-checker for insurance policy explanations.
-Given a policy's verified data (JSON) and one claim written about it, decide if
-the claim is fully supported by the data.
+Given a policy's verified data (JSON) and a numbered list of claims written
+about it, decide for EACH claim independently whether it is fully supported by
+the data.
 
 - grounded: every factual statement in the claim is directly supported by a
   field in the data. Paraphrase is fine; numbers must match.
@@ -49,7 +50,8 @@ the claim is fully supported by the data.
   contradicts the data, or embellishes (e.g. "best", "comprehensive" framed as
   fact, invented amounts/terms).
 
-When unsure, answer ungrounded. Judge ONLY against the provided data."""
+When unsure about a claim, answer ungrounded for that claim. Judge ONLY against
+the provided data. Return exactly one verdict per claim, in claim order."""
 
 
 # ---------------------------------------------------------------------------
@@ -74,9 +76,10 @@ class ExplanationOutput(BaseModel):
     items: list[PolicyReasons]
 
 
-class JudgeVerdict(BaseModel):
-    grounded: bool
-    note: str = ""
+class JudgePanelVerdicts(BaseModel):
+    """One verdict per numbered claim, in claim order (batched judge call)."""
+
+    grounded: list[bool]
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +108,40 @@ NO_MATCH_MESSAGE = (
 )
 
 FALLBACK_REASON = "Meets your stated criteria on record."
+
+# Deterministic explanation templates — the zero-LLM path (no provider key, or
+# LLM_ECONOMY=deterministic). Grounded by construction: every placeholder is
+# filled straight from verified policy fields or the user's own answers.
+DET_REASON_AGE = "At age {age}, you're within this plan's eligible range ({age_min}–{age_max})."
+DET_REASON_BUDGET = (
+    "Its minimum premium (₱{premium:,.0f} {frequency}) fits within your "
+    "budget of ₱{budget:,.0f}."
+)
+DET_REASON_ATTR = "Matches your preference — {attribute}: {value}."
+DET_REASON_FLAG = "Includes {attribute}."
+DET_GAP_ATTR = "This plan doesn't state {attribute}, which you asked about."
+
+# No-match diagnosis — rendered deterministically from the exact fields that
+# excluded each candidate, so a no-match says WHY instead of looking like the
+# agent "missed" a policy an admin knows exists. Honest and auditable.
+NO_MATCH_REASON_AGE = "accepts ages {age_min}–{age_max} (you said {age})"
+NO_MATCH_REASON_ATTR = "has {attribute} {stated}, you asked for {wanted}"
+NO_MATCH_REASON_FLAG = "doesn't include {attribute}"
+NO_MATCH_REASON_UNSUPPORTED = "doesn't support {attribute}: {wanted}"
+
+
+def no_match_detail(line: str, items: list[str]) -> str:
+    return f"Why nothing matched for {line}: " + "; ".join(items) + "."
+
+
+# Premium-frequency wording for deterministic templates.
+FREQUENCY_LABELS = {
+    "monthly": "per month",
+    "quarterly": "per quarter",
+    "semi_annual": "every six months",
+    "annual": "per year",
+    "single": "one-time",
+}
 
 DISCLAIMER = (
     "This is information, not insurance advice — confirm final terms with the insurer."

@@ -16,7 +16,8 @@ class FakeCursor:
 
 class FakeConnection:
     def __init__(self, stale_thread_ids):
-        self.stale = [(tid,) for tid in stale_thread_ids]
+        # Pool connections use dict_row (agent/db.py) — rows are dicts.
+        self.stale = [{"thread_id": tid} for tid in stale_thread_ids]
         self.statements: list[tuple[str, tuple]] = []
 
     async def execute(self, sql, params=None):

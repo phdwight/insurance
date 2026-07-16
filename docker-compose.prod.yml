@@ -49,6 +49,19 @@ x-langsmith-env: &langsmith-env
   # US SaaS by default; override for the EU region or a self-hosted LangSmith.
   LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
 
+# 6-model roster (2 per tier), shared by every LLM service. Values are left empty
+# here — the app owns the tier defaults and the legacy LLM_MODEL/LLM_MODEL_SMALL
+# fallback (see .env.example). Set any of these in your .env to override.
+x-llm-models: &llm-models
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-}
+  LLM_MODEL_LARGE_1: ${LLM_MODEL_LARGE_1:-}
+  LLM_MODEL_LARGE_2: ${LLM_MODEL_LARGE_2:-}
+  LLM_MODEL_MID_1: ${LLM_MODEL_MID_1:-}
+  LLM_MODEL_MID_2: ${LLM_MODEL_MID_2:-}
+  LLM_MODEL_SMALL_1: ${LLM_MODEL_SMALL_1:-}
+  LLM_MODEL_SMALL_2: ${LLM_MODEL_SMALL_2:-}
+
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -114,6 +127,7 @@ services:
       <<: *app-env
       AGENT_URL: http://agent:8001
       MCP_HTTP_URL: http://mcp-server:8002
+      RATE_LIMIT_CHAT: ${RATE_LIMIT_CHAT:-30/60}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must list the public PWA origin(s)}
     ports:
       - "${API_PORT:-41501}:8000"
@@ -142,10 +156,14 @@ services:
     logging: *logging
     command: ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8001", "--log-config", "log_config.yaml"]
     environment:
-      <<: [*app-env, *langsmith-env]
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      <<: [*app-env, *langsmith-env, *llm-models]
       VERIFIER_MODELS: ${VERIFIER_MODELS:-}
+      LLM_ECONOMY: ${LLM_ECONOMY:-full}
+      DAILY_TOKEN_BUDGET: ${DAILY_TOKEN_BUDGET:-0}
+      AGENT_DB_POOL_SIZE: ${AGENT_DB_POOL_SIZE:-10}
+      CATALOG_CACHE_SECONDS: ${CATALOG_CACHE_SECONDS:-60}
+      EXPLANATION_CACHE: ${EXPLANATION_CACHE:-auto}
+      EXPLANATION_CACHE_TTL_DAYS: ${EXPLANATION_CACHE_TTL_DAYS:-30}
       MCP_SERVER_URL: http://mcp-server:8002/mcp
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -199,12 +217,10 @@ services:
     logging: *logging
     command: ["uvicorn", "ingestion.main:app", "--host", "0.0.0.0", "--port", "8003", "--log-config", "log_config.yaml"]
     environment:
-      <<: [*app-env, *embedding-env]
+      <<: [*app-env, *embedding-env, *llm-models]
       DOCS_DIR: /data/uploads
-      # Frontier model — the approve auto-correction pass re-reads the document
-      # visually to repair a draft that failed validation.
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      # Mid tier drives the approve auto-correction pass — it re-reads the
+      # document visually to repair a draft that failed validation.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # REQUIRED — this port exposes the whole data/admin surface.
@@ -242,11 +258,9 @@ services:
     # ADMIN_TOKEN. Scale with `--scale ingestion-worker=N` (SKIP LOCKED is safe).
     command: ["python", "-m", "ingestion.worker"]
     environment:
-      <<: [*app-env, *embedding-env, *langsmith-env]
+      <<: [*app-env, *embedding-env, *langsmith-env, *llm-models]
       DOCS_DIR: /data/uploads
-      # Vision triage uses the frontier LLM_MODEL; extraction uses the small one.
-      LLM_MODEL: ${LLM_MODEL:-anthropic:claude-sonnet-4-5}
-      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-anthropic:claude-haiku-4-5}
+      # Vision triage + intake gate use the mid tier; extraction uses small.
       VISION_TRIAGE: ${VISION_TRIAGE:-auto}  # 'false' sends every PDF straight to docling
       INTAKE_GATE: ${INTAKE_GATE:-auto}  # LLM rejects non-insurance docs + redacts PII; 'false' disables
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

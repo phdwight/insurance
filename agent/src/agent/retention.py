@@ -41,7 +41,8 @@ async def purge_stale_sessions(conn, ttl_days: int) -> int:
         "SELECT thread_id FROM app.sessions WHERE last_seen < now() - %s * interval '1 day'",
         (ttl_days,),
     )
-    thread_ids = [row[0] for row in await stale.fetchall()]
+    # Pool connections use dict_row (see agent/db.py) — access by column name.
+    thread_ids = [row["thread_id"] for row in await stale.fetchall()]
     if not thread_ids:
         return 0
 
@@ -56,28 +57,31 @@ async def purge_stale_sessions(conn, ttl_days: int) -> int:
     return len(thread_ids)
 
 
-async def retention_loop(dsn: str) -> None:
+async def retention_loop() -> None:
     """Background task: purge on an interval, forever. Failures are logged and
     retried next round — retention must never take the service down."""
-    import psycopg
+    from agent import db, expl_cache
 
     while True:
         try:
-            async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+            async with db.connection() as conn:
                 purged = await purge_stale_sessions(conn, session_ttl_days())
                 if purged:
                     logger.info("retention: purged %d stale session(s)", purged)
+                stale = await expl_cache.purge_stale(conn, expl_cache.cache_ttl_days())
+                if stale:
+                    logger.info("retention: purged %d stale cached explanation(s)", stale)
         except Exception:
             logger.warning("retention pass failed; will retry", exc_info=True)
         await asyncio.sleep(retention_interval_seconds())
 
 
-async def record_activity(dsn: str, thread_id: str) -> None:
+async def record_activity(thread_id: str) -> None:
     """Fire-and-forget last-seen upsert; never disturbs the chat request."""
-    import psycopg
+    from agent import db
 
     try:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        async with db.connection() as conn:
             await touch_session(conn, thread_id)
     except Exception:
         logger.warning("failed to record session activity", exc_info=True)

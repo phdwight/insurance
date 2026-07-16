@@ -50,6 +50,7 @@
   .uc-sub { color:var(--muted); font-size:.82rem; margin-top:2px; }
   .pill { flex:none; display:inline-flex; align-items:center; gap:7px; padding:6px 13px; border-radius:999px; font-size:.82rem; font-weight:600; }
   .pill.work { background:var(--accent-soft); color:var(--accent); }
+  .pill.queue { background:#e8effb; color:var(--blue); }
   .pill.done { background:#e3f0e8; color:var(--accent); }
   .pill.err { background:#fdecec; color:var(--red); }
 
@@ -322,11 +323,19 @@ function newUploadCard(file) {
   card.querySelector(".uc-name").textContent = file.name;
   $("uploads").prepend(card); // newest on top
   return {
+    card,
     sub: card.querySelector(".uc-sub"),
     pill: card.querySelector(".pill"),
     steps: card.querySelector(".steps"),
     msg: card.querySelector(".uc-msg"),
   };
+}
+
+function removeUploadCard(runId) {
+  // Once a run is resolved (published or rejected) its upload card is stale —
+  // drop it so the list only holds uploads still moving through the pipeline.
+  if (!runId) return;
+  document.querySelector(`#uploads .upload-card[data-run-id="${runId}"]`)?.remove();
 }
 
 async function pollRun(runId, onTick) {
@@ -351,12 +360,19 @@ async function startUpload(file) {
   data.append("file", file);
   try {
     const result = await api("/documents", { method: "POST", body: data });
+    u.card.dataset.runId = result.extraction_run_id; // so approve/reject can clear it
     showQueue(); state.status = "queued";
     await loadStats(); renderFilters(); await loadQueue();
     u.sub.textContent = `${size} · parsing & extracting…`;
 
     const run = await pollRun(result.extraction_run_id, (secs, run) => {
-      setPill(u.pill, "work", `<span class="spin"></span>Working · ${secs}s`);
+      // A single worker processes runs in turn — a second upload waits in the
+      // queue. Say "Queued" (not "Working") until it's actually picked up, so the
+      // pill agrees with the step tracker instead of looking stuck.
+      const queued = run.status === "queued";
+      setPill(u.pill, queued ? "queue" : "work",
+        `<span class="spin"></span>${queued ? "Queued" : "Working"} · ${secs}s`);
+      u.sub.textContent = `${size} · ${queued ? "waiting in queue…" : "parsing & extracting…"}`;
       renderSteps(u.steps, run);
     });
     renderSteps(u.steps, run);
@@ -505,6 +521,7 @@ $("approve").addEventListener("click", async () => {
     msg.className = "msg ok";
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
+    removeUploadCard(state.runId); // published — clear its upload card from the list
     await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
   finally { btn.disabled = false; btn.textContent = label; }
@@ -519,6 +536,7 @@ $("reject").addEventListener("click", async () => {
     });
     msg.className = "msg ok"; msg.textContent = "Rejected.";
     $("detail").style.display = "none";
+    removeUploadCard(state.runId); // resolved — clear its upload card from the list
     await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });

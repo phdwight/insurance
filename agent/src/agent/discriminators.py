@@ -297,6 +297,39 @@ def narrow(candidates: list[dict], profile: NeedsProfile, line: str) -> list[dic
     return kept
 
 
+def exclusion_reason(policy: dict, profile: NeedsProfile, line: str) -> str | None:
+    """Why the user's answers exclude this policy, or None if it survives.
+
+    Runs the exact keeps() checks narrow() uses, so the no-match diagnosis can
+    never disagree with the narrowing that produced it. Copy in prompts.py."""
+    from agent import prompts
+
+    for disc in _line_discriminators(line):
+        value = _profile_value(profile, disc, line)
+        if value is None or disc.keeps(value, policy):
+            continue
+        attribute = disc.profile_key.replace("_", " ")
+        wanted = str(value).replace("_", " ")
+        if disc.profile_key == "age":
+            eligibility = policy.get("eligibility") or {}
+            return prompts.NO_MATCH_REASON_AGE.format(
+                age_min=eligibility.get("age_min", 0),
+                age_max=eligibility.get("age_max", "any"),
+                age=value,
+            )
+        stated = disc.extract(policy)
+        if isinstance(stated, bool):
+            return prompts.NO_MATCH_REASON_FLAG.format(attribute=attribute)
+        if stated is None or isinstance(stated, tuple):
+            return prompts.NO_MATCH_REASON_UNSUPPORTED.format(
+                attribute=attribute, wanted=wanted
+            )
+        return prompts.NO_MATCH_REASON_ATTR.format(
+            attribute=attribute, stated=str(stated).replace("_", " "), wanted=wanted
+        )
+    return None
+
+
 def pick_question(
     candidates: list[dict], profile: NeedsProfile, line: str, asked: list[str]
 ) -> Discriminator | None:
