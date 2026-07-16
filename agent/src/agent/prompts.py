@@ -40,8 +40,9 @@ as "gap", never dress them up as a match.
 - Mention relevant exclusions or limits honestly if they matter to the user."""
 
 JUDGE_SYSTEM = """You are a strict fact-checker for insurance policy explanations.
-Given a policy's verified data (JSON) and one claim written about it, decide if
-the claim is fully supported by the data.
+Given a policy's verified data (JSON) and a numbered list of claims written
+about it, decide for EACH claim independently whether it is fully supported by
+the data.
 
 - grounded: every factual statement in the claim is directly supported by a
   field in the data. Paraphrase is fine; numbers must match.
@@ -49,7 +50,8 @@ the claim is fully supported by the data.
   contradicts the data, or embellishes (e.g. "best", "comprehensive" framed as
   fact, invented amounts/terms).
 
-When unsure, answer ungrounded. Judge ONLY against the provided data."""
+When unsure about a claim, answer ungrounded for that claim. Judge ONLY against
+the provided data. Return exactly one verdict per claim, in claim order."""
 
 
 # ---------------------------------------------------------------------------
@@ -74,9 +76,10 @@ class ExplanationOutput(BaseModel):
     items: list[PolicyReasons]
 
 
-class JudgeVerdict(BaseModel):
-    grounded: bool
-    note: str = ""
+class JudgePanelVerdicts(BaseModel):
+    """One verdict per numbered claim, in claim order (batched judge call)."""
+
+    grounded: list[bool]
 
 
 # ---------------------------------------------------------------------------

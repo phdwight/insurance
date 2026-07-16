@@ -37,7 +37,7 @@
           <mxGeometry x="660" y="680" width="200" height="70" as="geometry" />
         </mxCell>
 
-        <mxCell id="panel" value="verify_explanations&#10;MULTI-LLM PANEL&#10;2+ judges, unanimous per reason&#10;then store to explanation cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="panel" value="verify_explanations&#10;MULTI-LLM PANEL&#10;2+ judges, unanimous per reason&#10;one batched call per judge per policy&#10;then store to explanation cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="660" y="810" width="200" height="70" as="geometry" />
         </mxCell>
 
