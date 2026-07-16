@@ -322,11 +322,19 @@ function newUploadCard(file) {
   card.querySelector(".uc-name").textContent = file.name;
   $("uploads").prepend(card); // newest on top
   return {
+    card,
     sub: card.querySelector(".uc-sub"),
     pill: card.querySelector(".pill"),
     steps: card.querySelector(".steps"),
     msg: card.querySelector(".uc-msg"),
   };
+}
+
+function removeUploadCard(runId) {
+  // Once a run is resolved (published or rejected) its upload card is stale —
+  // drop it so the list only holds uploads still moving through the pipeline.
+  if (!runId) return;
+  document.querySelector(`#uploads .upload-card[data-run-id="${runId}"]`)?.remove();
 }
 
 async function pollRun(runId, onTick) {
@@ -351,6 +359,7 @@ async function startUpload(file) {
   data.append("file", file);
   try {
     const result = await api("/documents", { method: "POST", body: data });
+    u.card.dataset.runId = result.extraction_run_id; // so approve/reject can clear it
     showQueue(); state.status = "queued";
     await loadStats(); renderFilters(); await loadQueue();
     u.sub.textContent = `${size} · parsing & extracting…`;
@@ -505,6 +514,7 @@ $("approve").addEventListener("click", async () => {
     msg.className = "msg ok";
     msg.textContent = `Published: ${result.published.slug}`;
     $("detail").style.display = "none";
+    removeUploadCard(state.runId); // published — clear its upload card from the list
     await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = friendlyError(error.message); }
   finally { btn.disabled = false; btn.textContent = label; }
@@ -519,6 +529,7 @@ $("reject").addEventListener("click", async () => {
     });
     msg.className = "msg ok"; msg.textContent = "Rejected.";
     $("detail").style.display = "none";
+    removeUploadCard(state.runId); // resolved — clear its upload card from the list
     await loadStats(); renderFilters(); await loadQueue();
   } catch (error) { msg.className = "msg err"; msg.textContent = error.message; }
 });
