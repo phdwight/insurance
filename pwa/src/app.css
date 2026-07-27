@@ -294,7 +294,15 @@ button[type="submit"]:hover:not(:disabled) { background: var(--accent-600); }
   text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.85rem;
   border: 1px solid var(--accent); color: var(--accent-700); background: transparent;
 }
-.answer-chip:hover { background: var(--accent); color: #f2f2f3; }
+/* :not(:disabled) is load-bearing, not decoration. The generic
+   `button:hover:not(:disabled)` rule above is MORE specific (0,2,1) than a bare
+   `.answer-chip:hover` (0,2,0), so it won the background and left near-white
+   text on a 6% grey wash — ~1.05:1 contrast, effectively invisible. Matching
+   its shape lets the accent fill win. */
+/* accent-700, not accent: white on --accent measures 3.7:1, under WCAG AA's
+   4.5 for text this size. accent-700 takes it to ~5.5:1 and reads as a normal
+   darken-on-hover affordance. */
+.answer-chip:hover:not(:disabled) { background: var(--accent-700); color: #f2f2f3; }
 
 /* Chips carrying a plain-language gloss (jargon like VUL/Endowment) stack the
    term over its explanation and take the full row so the sentence reads well. */
@@ -492,7 +500,9 @@ a.brochure:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
   letter-spacing: 0.12em; color: var(--accent-700);
   background: none; border: none; padding: 0; text-decoration: underline;
 }
-.disclaimer-link:hover { background: none; color: var(--accent-800); }
+/* Same specificity trap: without :not(:disabled) the generic button hover
+   painted a grey block behind this link-styled button. */
+.disclaimer-link:hover:not(:disabled) { background: none; color: var(--accent-800); }
 .disclaimer-dialog {
   max-width: 640px; width: calc(100% - 2rem); max-height: 82dvh;
   border: 1px solid var(--border); border-radius: var(--radius);
