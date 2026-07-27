@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Safe Harbor">
+  <!-- The app's brand mark (.brand-avatar): a steel-blue rounded square with the
+       white ShieldIcon. Colours track app.css (accent #5980a6 on card #f2f2f3).
+       Stroke is heavier than the in-app icon (2.6 against a 24 viewBox, vs 1.8)
+       so the shield still reads at a 16px browser-tab size.
+       NB: no double-hyphens in this comment; XML forbids them, and a browser
+       loading this file parses it as strict XML. -->
+  <rect width="64" height="64" rx="12" fill="#5980a6"/>
+  <g transform="translate(12 12) scale(1.667)" fill="none" stroke="#f2f2f3"
+     stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3z"/>
+    <path d="M9 12l2 2 4-4"/>
+  </g>
+</svg>

@@ -28,20 +28,30 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["apple-touch-icon.png"],
+      includeAssets: ["apple-touch-icon.png", "favicon.svg", "favicon.ico"],
       manifest: {
         name: "Safe Harbor — Insurance Concierge",
         short_name: "Safe Harbor",
         description:
           "Describe what you want to protect — get matching insurance policies, compared and explained.",
-        theme_color: "#1f4b3a",
-        background_color: "#e9ece8",
+        // Track app.css: --accent for the theme, --bg for the splash ground.
+        // These were still the pre-re-skin green palette.
+        theme_color: "#5980a6",
+        background_color: "#dfe0e2",
         display: "standalone",
         start_url: "/",
         icons: [
-          { src: "pwa-192.png", sizes: "192x192", type: "image/png" },
-          { src: "pwa-512.png", sizes: "512x512", type: "image/png" },
-          { src: "pwa-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          // Its own art, not the rounded one reused: a maskable icon is
+          // full-bleed and keeps the mark inside the central safe zone, or
+          // Android's circle mask clips the corners off the logo.
+          {
+            src: "pwa-512-maskable.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
       },
       workbox: {
