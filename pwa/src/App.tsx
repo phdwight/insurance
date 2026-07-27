@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { newSessionId, streamChat, type Question, type Recommendations } from "./api";
+import { appVersion, newSessionId, streamChat, type Question, type Recommendations } from "./api";
 import Chat, { type ChatMessage } from "./components/Chat";
 import Disclaimer from "./components/Disclaimer";
 import { ShieldIcon } from "./components/icons";
@@ -111,7 +111,7 @@ export default function App() {
       <footer className="build-stamp">
         <Disclaimer />
         <span>
-          v{__APP_VERSION__} · build {__BUILD_ID__}
+          v{appVersion()} · build {__BUILD_ID__}
         </span>
       </footer>
     </main>
