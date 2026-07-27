@@ -296,6 +296,9 @@ services:
     environment:
       VITE_API_URL: ${VITE_API_URL:?VITE_API_URL must be the public API address}
       VITE_INGESTION_URL: ${VITE_INGESTION_URL:-}
+      # Same as the Python services: report the release this was deployed as,
+      # since a re-tagged pwa image still has an older version baked in.
+      APP_VERSION: ${IMAGE_TAG:-}
     ports:
       - "${PWA_PORT:-41500}:80"
     healthcheck:

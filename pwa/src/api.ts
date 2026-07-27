@@ -3,7 +3,7 @@ declare global {
     // Injected at container start from $VITE_API_URL / $VITE_INGESTION_URL by
     // pwa/docker-entrypoint.sh (see /config.js). Absent in local dev, where
     // import.meta.env takes over.
-    __APP_CONFIG__?: { API_URL?: string; INGESTION_URL?: string };
+    __APP_CONFIG__?: { API_URL?: string; INGESTION_URL?: string; APP_VERSION?: string };
   }
 }
 
@@ -22,6 +22,14 @@ const INGESTION =
   window.__APP_CONFIG__?.INGESTION_URL ||
   import.meta.env.VITE_INGESTION_URL ||
   (import.meta.env.DEV ? "http://localhost:8003" : API);
+
+// The release actually running. __APP_VERSION__ is compiled in at BUILD time,
+// but selective rebuilds re-tag an unchanged pwa image into later releases, so
+// that number goes stale while the deployment moves on. config.js is rendered
+// per-container (and never precached), so it reports the deployed release —
+// exactly what APP_VERSION=$IMAGE_TAG gives the Python services.
+export const appVersion = (): string =>
+  window.__APP_CONFIG__?.APP_VERSION?.trim() || __APP_VERSION__;
 
 export const brochureImageUrl = (slug: string): string | null =>
   INGESTION ? `${INGESTION}/policies/${slug}/brochure` : null;
