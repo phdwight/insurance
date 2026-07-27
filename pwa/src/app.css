@@ -107,7 +107,9 @@ main.done .messages { flex: none; }
   font-size: 0.8rem; color: var(--accent-700);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.licensed {
+/* Was ".licensed" — renamed with the badge copy, since the operator is not a
+   licensed intermediary and must not imply it (docs/disclaimer.md). */
+.not-advice {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--accent); border-radius: var(--radius-sm);
   padding: 4px 11px; background: transparent; color: var(--accent-700);
@@ -480,6 +482,42 @@ a.brochure:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
   text-align: center; color: var(--muted); background: var(--bg);
   font-family: var(--font-heading); text-transform: uppercase;
   font-size: 0.68rem; letter-spacing: 0.12em;
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Disclaimer (legal notice; wording canonical in docs/disclaimer.md) ── */
+.disclaimer-link {
+  font: inherit; font-family: var(--font-heading); text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--accent-700);
+  background: none; border: none; padding: 0; text-decoration: underline;
+}
+.disclaimer-link:hover { background: none; color: var(--accent-800); }
+.disclaimer-dialog {
+  max-width: 640px; width: calc(100% - 2rem); max-height: 82dvh;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--ink); padding: 0;
+  box-shadow: var(--shadow-lg);
+}
+.disclaimer-dialog::backdrop { background: color-mix(in srgb, #1d1f20 55%, transparent); }
+.disclaimer-dialog article {
+  padding: 1.5rem; overflow-y: auto; max-height: calc(82dvh - 4.5rem);
+  /* Reset the footer's centred/uppercase stamp styling — this is body copy. */
+  text-transform: none; letter-spacing: normal; text-align: left;
+  font-family: var(--font-body);
+}
+.disclaimer-dialog h2 {
+  font-family: var(--font-heading); text-transform: uppercase;
+  letter-spacing: 0.04em; font-size: 1.35rem; margin: 0 0 1rem;
+}
+.disclaimer-dialog h3 {
+  font-family: var(--font-heading); font-size: 0.95rem; margin: 1.25rem 0 0.35rem;
+  color: var(--accent-800);
+}
+.disclaimer-dialog p { font-size: 0.86rem; line-height: 1.55; margin: 0; color: var(--muted-strong); }
+.disclaimer-close {
+  display: flex; justify-content: flex-end;
+  padding: 0.75rem 1.5rem; border-top: 1px solid var(--border);
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────── */

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { newSessionId, streamChat, type Question, type Recommendations } from "./api";
 import Chat, { type ChatMessage } from "./components/Chat";
+import Disclaimer from "./components/Disclaimer";
 import { ShieldIcon } from "./components/icons";
 import Intake from "./components/Intake";
 import ResetButton from "./components/ResetButton";
@@ -77,9 +78,12 @@ export default function App() {
             <span className="brand-sub">Finds honest matches — never a forced fit</span>
           </span>
         </div>
-        <span className="licensed">
+        {/* No "Licensed" badge: the operator is NOT a licensed insurance
+            intermediary, and implying otherwise is exactly the claim the
+            Insurance Commission positioning forbids (see docs/disclaimer.md). */}
+        <span className="not-advice">
           <ShieldIcon size={13} />
-          Licensed
+          Information only
         </span>
       </header>
 
@@ -105,7 +109,10 @@ export default function App() {
       )}
 
       <footer className="build-stamp">
-        v{__APP_VERSION__} · build {__BUILD_ID__}
+        <Disclaimer />
+        <span>
+          v{__APP_VERSION__} · build {__BUILD_ID__}
+        </span>
       </footer>
     </main>
   );
