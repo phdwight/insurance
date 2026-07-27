@@ -104,7 +104,9 @@ export default function App() {
         </>
       )}
 
-      <footer className="build-stamp">build {__BUILD_ID__}</footer>
+      <footer className="build-stamp">
+        v{__APP_VERSION__} · build {__BUILD_ID__}
+      </footer>
     </main>
   );
 }

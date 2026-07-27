@@ -20,39 +20,85 @@ name: Publish images
 # "Manage Actions access" → add the `insurance` repo with the Write role (or
 # delete the old package so the workflow recreates it already linked to the repo).
 
+# Every merge to main cuts a release: tests gate it, a vX.Y.Z tag is created, and
+# every image is tagged with that version. There is deliberately NO path filter
+# here — a docs-only merge still gets a version tag, and the `changes` job still
+# limits which images are actually rebuilt (unchanged ones are re-tagged from
+# their existing digest, so `IMAGE_TAG=X.Y.Z` always pulls a complete stack).
 on:
   push:
     branches: [main]
-    # First gate: skip the whole workflow when nothing image-affecting changed
-    # (docs / diagrams / harness / compose). The `changes` job then narrows to
-    # the specific images that changed. See harness/deploy-gotchas.md.
-    paths:
-      - "api/**"
-      - "agent/**"
-      - "mcp-server/**"
-      - "ingestion/**"
-      - "db/**"
-      - "shared/**"
-      - "pwa/**"
-      - "Dockerfile.python"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "log_config.yaml"
-      - ".github/workflows/publish-images.yml"
   workflow_dispatch:
 
 concurrency:
   group: publish-images
-  cancel-in-progress: true
+  # NOT cancel-in-progress: a cancelled release can leave a pushed git tag with
+  # no images published against it.
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write # push the vX.Y.Z tag
   packages: write
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  # The same suite that gates a PR, reused — nothing is tagged or published
+  # unless it passes.
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  # Version source of truth = git tags. The committed VERSION file is only the
+  # seed for the first release and the FLOOR you raise for a minor/major bump
+  # (set VERSION to 0.2.0 and the next release is 0.2.0, not 0.1.x).
+  #
+  # Only the TAG is pushed — never a commit. main is protected and requires PRs,
+  # so a CI-pushed bump commit would be rejected; tags aren't branch-protected,
+  # so this works with the stock GITHUB_TOKEN and `contents: write`.
+  bump:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      sha: ${{ steps.next.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the full tag history to find the latest version
+      - id: next
+        run: |
+          set -euo pipefail
+          floor="$(tr -d '[:space:]' < VERSION)"
+          # -E so the same expression works under both GNU and BSD sed (this
+          # logic is simulated locally on macOS before it is trusted in CI).
+          latest="$(git tag -l 'v*' \
+            | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' \
+            | sort -V | tail -1)"
+          if [ -n "$latest" ]; then
+            IFS=. read -r major minor patch <<<"$latest"
+            bumped="${major}.${minor}.$((patch + 1))"
+          else
+            bumped="0.0.0" # no releases yet — the floor wins below
+          fi
+          # next = max(latest tag with patch+1, committed floor)
+          version="$(printf '%s\n%s\n' "$bumped" "$floor" | sort -V | tail -1)"
+          echo "latest tag: ${latest:-<none>} · floor: $floor -> releasing $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "sha=$GITHUB_SHA" >>"$GITHUB_OUTPUT"
+      - name: Create and push the tag
+        run: |
+          set -euo pipefail
+          version="${{ steps.next.outputs.version }}"
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "v$version already exists — nothing to do (idempotent re-run)"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$version" -m "Release v$version" "$GITHUB_SHA"
+          git push origin "v$version"
+
   # Decide which images to (re)build. Shared Python inputs fan out to every
   # Python image; pwa is independent. workflow_dispatch rebuilds everything.
   changes:
@@ -116,7 +162,7 @@ jobs:
 
   build:
     name: build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
-    needs: changes
+    needs: [changes, bump]
     if: needs.changes.outputs.images != '[]'
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -128,6 +174,15 @@ jobs:
           - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha || github.ref }}
+      # Bake the released version BEFORE building, so the artifact carries the
+      # version it will be tagged with. (Bumping after the build is the classic
+      # off-by-one that ships every image labelled with the previous release.)
+      # Python images read the file via COPY; the PWA gets the build-arg, since
+      # it builds from the pwa/ context where this file isn't visible.
+      - name: Bake version ${{ needs.bump.outputs.version }}
+        run: echo "${{ needs.bump.outputs.version }}" > VERSION
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -145,6 +200,7 @@ jobs:
           build-args: |
             SERVICE=${{ matrix.image.service }}
             APT_PACKAGES=${{ matrix.image.apt }}
+            APP_VERSION=${{ needs.bump.outputs.version }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
       - name: Export digest
         run: |
@@ -198,3 +254,70 @@ jobs:
             $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image }}@sha256:%s ' *)
       - name: Inspect
         run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/insurance-${{ matrix.image }}:latest
+
+  # Stamp the release version onto EVERY image, not just the rebuilt ones, so
+  # `IMAGE_TAG=X.Y.Z` pulls a complete, coherent stack (and is a real rollback
+  # point). Unchanged images are re-tagged from their existing :latest digest —
+  # a manifest copy, no rebuild. Then prove the version baked INSIDE each
+  # published image matches the git tag.
+  release:
+    name: tag & verify v${{ needs.bump.outputs.version }}
+    needs: [bump, changes, merge]
+    # Runs even when nothing was rebuilt (docs-only merge): `merge` is skipped
+    # then, but every image still needs the new version tag.
+    if: ${{ !cancelled() && needs.bump.result == 'success' && needs.merge.result != 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag every image with the release version
+        env:
+          VERSION: ${{ needs.bump.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          for name in migrate api agent mcp-server ingestion pwa; do
+            image="${{ env.REGISTRY }}/$OWNER/insurance-$name"
+            echo "==> $image:$VERSION"
+            docker buildx imagetools create -t "$image:$VERSION" "$image:latest"
+          done
+      - name: Verify
+        env:
+          VERSION: ${{ needs.bump.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REBUILT: ${{ needs.changes.outputs.names }}
+        run: |
+          set -euo pipefail
+          fail=0
+          # (a) Every image must resolve at the release tag — that is what makes
+          #     IMAGE_TAG=X.Y.Z a complete, pullable stack.
+          for name in migrate api agent mcp-server ingestion pwa; do
+            image="${{ env.REGISTRY }}/$OWNER/insurance-$name:$VERSION"
+            docker buildx imagetools inspect "$image" >/dev/null \
+              && echo "TAG OK   $name:$VERSION" \
+              || { echo "TAG MISSING $name:$VERSION"; fail=1; }
+          done
+          # (b) Images REBUILT in this run must carry the release version inside
+          #     — this is what catches a bump-after-build off-by-one. Images that
+          #     were only re-tagged keep the version of the build they came from
+          #     (honest: that is the code actually in them); at runtime compose
+          #     passes APP_VERSION=$IMAGE_TAG so a pinned deploy still reports the
+          #     release version everywhere. See README "Versioning & releases".
+          for name in $(jq -r '.[]' <<<"$REBUILT"); do
+            image="${{ env.REGISTRY }}/$OWNER/insurance-$name:$VERSION"
+            if [ "$name" = "pwa" ]; then
+              got="$(docker run --rm --entrypoint cat "$image" /usr/share/nginx/html/VERSION)"
+            else
+              got="$(docker run --rm --entrypoint cat "$image" /app/VERSION)"
+            fi
+            got="$(tr -d '[:space:]' <<<"$got")"
+            [ "$got" = "$VERSION" ] \
+              && echo "BAKED OK $name -> $got" \
+              || { echo "BAKED DRIFT $name -> '$got' != '$VERSION'"; fail=1; }
+          done
+          exit $fail

@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from mcp_server import queries
+from shared import app_version
 
 # The SDK's DNS-rebinding protection rejects requests (421) unless the Host
 # header is allowlisted. Cover the in-cluster name plus local dev by default.
@@ -111,7 +112,9 @@ def compare_policies(slugs: list[str]) -> str:
 
 
 async def health(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "service": "mcp-server"})
+    return JSONResponse(
+        {"status": "ok", "service": "mcp-server", "version": app_version()}
+    )
 
 
 async def product_lines(request: Request) -> JSONResponse:

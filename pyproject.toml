@@ -3,6 +3,8 @@ name = "insurance-monorepo"
 version = "0.1.0"
 description = "Agentic insurance recommender — workspace root"
 requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 
 [tool.uv]
 package = false
@@ -62,4 +64,5 @@ testpaths = [
     "mcp-server/tests",
     "ingestion/tests",
     "shared/tests",
+    "tests",
 ]

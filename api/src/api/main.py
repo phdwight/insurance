@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
+from shared import app_version
+
 AGENT_URL = os.environ.get("AGENT_URL", "http://localhost:8001")
 MCP_HTTP_URL = os.environ.get("MCP_HTTP_URL", "http://localhost:8002")
 INGESTION_URL = os.environ.get("INGESTION_URL", "http://localhost:8003")
@@ -163,4 +165,4 @@ async def chat(request: ChatRequest, raw_request: Request) -> StreamingResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "api"}
+    return {"status": "ok", "service": "api", "version": app_version()}

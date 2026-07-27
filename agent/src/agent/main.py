@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from agent import retention
 from agent.graph import build_graph
+from shared import app_version
 
 logger = logging.getLogger("agent")
 
@@ -120,7 +121,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "agent"}
+    return {"status": "ok", "service": "agent", "version": app_version()}
 
 
 @app.get("/ops/usage")

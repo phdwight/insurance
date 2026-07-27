@@ -75,6 +75,7 @@ Rough total: ~3–4 months part-time solo, faster with help. Phases 1–2 can pr
 | `03-agent-design.md` | LangGraph state, graph, guardrails, evals |
 | `04-pwa-ux.md` | Screens, PWA capabilities, streaming protocol |
 | `05-roadmap.md` | Phases, risks, open questions |
+| `06-scaling.md` | Scaling posture: poured slabs and the trigger for each next step |
 | `architecture.drawio` | High-level component interaction (services, data, third-party APIs) |
 | `agent-graph.drawio` | LangGraph agent diagram (kept in sync with the graph) |
 | `ingestion-pipeline.drawio` | Ingestion pipeline diagram (kept in sync with the flow) |
