@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1f4b3a" />
+    <!-- Steel Field accent (app.css --accent). Was #1f4b3a, left over from the
+         pre-re-skin green palette. -->
+    <meta name="theme-color" content="#5980a6" />
+    <!-- SVG first (crisp at every size, themeable); .ico is the fallback for
+         browsers that ignore it. apple-touch-icon is full-bleed — iOS rounds it. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Runtime config: empty in dev, regenerated per-host at container start. -->
     <script src="/config.js"></script>
     <title>Safe Harbor — Insurance Concierge</title>
