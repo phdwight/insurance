@@ -4,9 +4,9 @@ isn't, so the precedence and the never-lie fallback are pinned here."""
 
 from pathlib import Path
 
-from shared.version import FALLBACK
+from shared.version import BUILD_FALLBACK, FALLBACK
 
-from shared import app_version
+from shared import app_version, build_id
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -59,3 +59,19 @@ def test_release_floor_is_not_below_the_workspace_version() -> None:
         if line.startswith("version = ")
     )
     assert floor >= tuple(int(p) for p in declared.split("."))
+
+
+def test_build_id_env_override_wins(monkeypatch) -> None:
+    monkeypatch.setenv("BUILD_ID", "202607271200")
+    build_id.cache_clear()
+    assert build_id() == "202607271200"
+    build_id.cache_clear()
+
+
+def test_build_id_falls_back_to_dev_in_a_checkout(monkeypatch) -> None:
+    # BUILD_ID is written into the build context by CI and gitignored, so a
+    # source checkout has none — it must say "dev", never fake a build stamp.
+    monkeypatch.delenv("BUILD_ID", raising=False)
+    build_id.cache_clear()
+    assert build_id() == BUILD_FALLBACK == "dev"
+    build_id.cache_clear()

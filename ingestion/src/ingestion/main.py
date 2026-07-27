@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ingestion import correction, parsing, preview, repository
 from ingestion.prompts import PolicyDraft
-from shared import app_version
+from shared import app_version, build_id
 
 
 def require_admin_token(request: Request) -> None:
@@ -253,8 +253,14 @@ def policy_document(slug: str) -> FileResponse:
 @app.get("/admin")
 def admin() -> HTMLResponse:
     """Reviewer UI: upload documents, inspect drafts, approve/reject.
-    Single static file, no build step — served by this service."""
-    return HTMLResponse((Path(__file__).parent / "admin.html").read_text())
+    Single static file, no build step — served by this service.
+
+    The release stamp is substituted here rather than written into the file, so
+    what a reviewer sees always matches the running image (same numbers the PWA
+    footer shows)."""
+    html = (Path(__file__).parent / "admin.html").read_text()
+    html = html.replace("__APP_VERSION__", app_version()).replace("__BUILD_ID__", build_id())
+    return HTMLResponse(html)
 
 
 @app.get("/health")

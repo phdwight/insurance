@@ -16,7 +16,7 @@ from shared.catalog import (
     TravelCoverage,
 )
 from shared.needs import NeedsProfile, merge_profiles
-from shared.version import app_version
+from shared.version import app_version, build_id
 
 # Resolved, never hardcoded — see shared/version.py (a literal here would drift
 # from the git tag the moment CI cut a release).
@@ -38,5 +38,6 @@ __all__ = [
     "ProductLine",
     "TravelCoverage",
     "app_version",
+    "build_id",
     "merge_profiles",
 ]

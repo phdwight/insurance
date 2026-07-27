@@ -45,6 +45,10 @@ if [ -f .env ]; then
   echo "==> preflight OK: .env is excluded from the build context"
 fi
 
+# Same stamp CI bakes, so a manually published image is identifiable too.
+date -u +%Y%m%d%H%M > BUILD_ID
+trap 'rm -f BUILD_ID' EXIT
+
 builder="insurance-builder"
 docker buildx inspect "$builder" >/dev/null 2>&1 || docker buildx create --name "$builder" --use
 docker buildx use "$builder"
