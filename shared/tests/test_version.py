@@ -15,25 +15,51 @@ def test_env_override_wins(monkeypatch) -> None:
     # Compose passes APP_VERSION=$IMAGE_TAG, so a pinned deploy reports the
     # release it was deployed as, whatever the image happens to have baked in.
     monkeypatch.setenv("APP_VERSION", "9.9.9")
+    monkeypatch.delenv("BUILD_ID", raising=False)  # even with no build stamp...
     app_version.cache_clear()
-    assert app_version() == "9.9.9"
+    build_id.cache_clear()
+    assert app_version() == "9.9.9"  # ...an explicit override is never suffixed
     app_version.cache_clear()
+    build_id.cache_clear()
 
 
-def test_falls_back_to_the_version_file(monkeypatch) -> None:
+def test_unpublished_build_is_marked_dev(monkeypatch) -> None:
+    """A source checkout has no BUILD_ID, so it is not a published artifact. It
+    must NOT report the committed VERSION bare: that file is the release FLOOR
+    (deliberately left behind as tags advance), so "0.1.1" would claim to be a
+    real past release while the build stamp said "dev"."""
     monkeypatch.delenv("APP_VERSION", raising=False)
+    monkeypatch.delenv("BUILD_ID", raising=False)
     app_version.cache_clear()
+    build_id.cache_clear()
+    floor = (REPO / "VERSION").read_text().strip()
+    assert app_version() == f"{floor}+dev"
+    app_version.cache_clear()
+    build_id.cache_clear()
+
+
+def test_ci_built_artifact_reports_the_bare_version(monkeypatch) -> None:
+    """CI writes a BUILD_ID beside VERSION for every image it publishes — that
+    is what proves this is a real release, so no +dev suffix."""
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    monkeypatch.setenv("BUILD_ID", "202607271200")
+    app_version.cache_clear()
+    build_id.cache_clear()
     assert app_version() == (REPO / "VERSION").read_text().strip()
     app_version.cache_clear()
+    build_id.cache_clear()
 
 
 def test_blank_env_is_ignored(monkeypatch) -> None:
     # compose renders APP_VERSION as "" when IMAGE_TAG is unset — that must not
-    # blank out the version.
+    # blank out the version (it falls through to the file, marked unpublished).
     monkeypatch.setenv("APP_VERSION", "   ")
+    monkeypatch.delenv("BUILD_ID", raising=False)
     app_version.cache_clear()
-    assert app_version() == (REPO / "VERSION").read_text().strip()
+    build_id.cache_clear()
+    assert app_version() == (REPO / "VERSION").read_text().strip() + "+dev"
     app_version.cache_clear()
+    build_id.cache_clear()
 
 
 def test_fallback_is_obviously_unreleased() -> None:

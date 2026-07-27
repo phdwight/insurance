@@ -188,7 +188,7 @@ Cutting a GitHub release reuses the tag CI already made — never let it create 
 gh release create v0.2.0 --verify-tag --notes "…"
 ```
 
-**Everything reports the same number.** Each service returns it from `/health`, and the PWA shows it in the footer and serves it at `/VERSION`. At runtime the version resolves as `APP_VERSION` env → the baked `VERSION` file → `0.0.0+dev` (an unstamped local build is always identifiable). `docker-compose.prod.yml` passes `APP_VERSION=$IMAGE_TAG`, so a version-pinned deploy reports that release across every service.
+**Everything reports the same number.** Each service returns it from `/health`, and the PWA shows it in the footer and serves it at `/VERSION`. At runtime the version resolves as `APP_VERSION` env → the baked `VERSION` file → `0.0.0+dev`, and anything that is **not** a published artifact gets a `+dev` suffix (detected by the absence of the `BUILD_ID` CI writes for every image it publishes). So a source checkout reports `0.1.1+dev` — the floor, plainly marked — rather than claiming to be release 0.1.1. `docker-compose.prod.yml` passes `APP_VERSION=$IMAGE_TAG`, so a version-pinned deploy reports that release across every service.
 
 Images are published automatically by the [`Publish images`](.github/workflows/publish-images.yml) workflow (multi-arch amd64 + arm64 on native runners); `deploy/push-images.sh` is the manual fallback.
 
