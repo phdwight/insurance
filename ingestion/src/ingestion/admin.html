@@ -114,6 +114,17 @@
     .steps { flex-wrap:wrap; gap:10px 0; }
     .step-line { min-width:16px; }
   }
+
+  /* Legal notice (canonical wording: docs/disclaimer.md) */
+  .site-footer { max-width:920px; margin:0 auto; padding:0 1.25rem 2.5rem; text-align:center; }
+  .link-btn { font:inherit; font-size:.8rem; cursor:pointer; background:none; border:none; color:var(--accent); text-decoration:underline; padding:0; }
+  .disclaimer-dialog { max-width:640px; width:calc(100% - 2rem); max-height:82vh; border:1px solid var(--border); border-radius:16px; padding:0; background:var(--card); color:var(--ink); }
+  .disclaimer-dialog::backdrop { background:rgba(20,23,26,.55); }
+  .disclaimer-dialog article { padding:1.5rem 1.75rem; overflow-y:auto; max-height:calc(82vh - 4.5rem); }
+  .disclaimer-dialog h2 { margin:0 0 1rem; font-size:1.3rem; color:var(--accent-dark); }
+  .disclaimer-dialog h3 { margin:1.25rem 0 .35rem; font-size:.92rem; color:var(--accent); }
+  .disclaimer-dialog p { margin:0; font-size:.85rem; line-height:1.55; color:var(--muted); }
+  .disclaimer-close { display:flex; justify-content:flex-end; padding:.75rem 1.75rem; border-top:1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -185,6 +196,72 @@
     <div class="msg" id="detail-msg"></div>
   </section>
 </main>
+
+<!-- Legal notice. Canonical wording: docs/disclaimer.md — mirrored in the PWA
+     (Disclaimer.tsx); tests/test_disclaimer_sync.py guards them against drift. -->
+<footer class="site-footer">
+  <button type="button" class="link-btn" onclick="document.getElementById('disclaimer').showModal()">
+    Important disclaimer
+  </button>
+</footer>
+
+<dialog id="disclaimer" class="disclaimer-dialog">
+  <article>
+    <h2>Important disclaimer</h2>
+
+    <h3>Information only &mdash; not advice</h3>
+    <p>This service provides general product information and comparisons drawn from publicly
+      available insurer materials. It is <strong>not financial, insurance, investment, legal, or
+      tax advice</strong>, and it is not a recommendation to buy, hold, or cancel any policy.</p>
+
+    <h3>We are not a licensed insurance intermediary</h3>
+    <p>The operator is <strong>not</strong> an insurance company, agent, broker, or adviser, and is
+      <strong>not licensed by the Philippine Insurance Commission</strong> or any other regulator to
+      sell or advise on insurance. This service does not solicit, negotiate, quote, bind, issue, or
+      sell insurance. Using it creates no agency, brokerage, fiduciary, or professional-client
+      relationship of any kind.</p>
+
+    <h3>Consult a licensed professional</h3>
+    <p>Before buying, changing, or cancelling any policy, speak with a <strong>licensed insurance
+      agent, broker, or financial adviser</strong>, and read the insurer's official policy contract.
+      Only the insurer can quote, assess eligibility, and issue cover.</p>
+
+    <h3>Accuracy is not guaranteed &mdash; the insurer's contract governs</h3>
+    <p>Policy details are extracted from insurer brochures and may be <strong>incomplete, outdated,
+      or wrong</strong>, and parts of this service use <strong>artificial intelligence, which can
+      make mistakes</strong>. Published entries are reviewed by a human before going live, but that
+      is a check, not a guarantee. Always verify against the insurer's materials. Where anything
+      here conflicts with the insurer's official policy contract, the
+      <strong>policy contract prevails</strong>.</p>
+
+    <h3>Provided &ldquo;as is&rdquo;</h3>
+    <p>This service is provided <strong>&ldquo;as is&rdquo; and &ldquo;as available&rdquo;, without
+      warranties of any kind</strong>, whether express, implied, or statutory &mdash; including any
+      implied warranty of merchantability, fitness for a particular purpose, title,
+      non-infringement, accuracy, completeness, or uninterrupted or error-free operation.</p>
+
+    <h3>Limitation of liability</h3>
+    <p>To the maximum extent permitted by law, the operator and its contributors are
+      <strong>not liable for any loss or damage</strong> &mdash; direct, indirect, incidental,
+      consequential, special, exemplary, or punitive &mdash; arising from use of, or reliance on,
+      this service, including lost profits, lost or denied insurance coverage, a declined or reduced
+      claim, data loss, and business interruption, even if advised of the possibility.</p>
+
+    <h3>No affiliation with insurers</h3>
+    <p>The operator is <strong>not affiliated with, endorsed by, or acting on behalf of</strong> any
+      insurer named in this service. Product and company names are the trademarks of their
+      respective owners and are used only to identify the products described.</p>
+
+    <h3>Uploads and personal data</h3>
+    <p>Documents uploaded here may contain personal information. Derived text is redacted before
+      extraction, but the original file is retained for reviewers. Upload only what you are
+      authorised to process, and only for the purpose of publishing product information.</p>
+
+    <h3>Changes</h3>
+    <p>This service and this notice may change at any time without notice.</p>
+  </article>
+  <form method="dialog" class="disclaimer-close"><button type="submit">Close</button></form>
+</dialog>
 
 <script>
 const state = { status: "pending_review", runId: null };

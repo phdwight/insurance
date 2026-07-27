@@ -1,10 +1,14 @@
 # Insurance Recommender
 
+[![CI](https://github.com/phdwight/insurance/actions/workflows/ci.yml/badge.svg)](https://github.com/phdwight/insurance/actions/workflows/ci.yml)
+[![Publish images](https://github.com/phdwight/insurance/actions/workflows/publish-images.yml/badge.svg)](https://github.com/phdwight/insurance/actions/workflows/publish-images.yml)
+[![version](https://img.shields.io/github/v/tag/phdwight/insurance?label=version)](https://github.com/phdwight/insurance/tags)
+[![license](https://img.shields.io/github/license/phdwight/insurance)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.14%2B-blue)](https://www.python.org/)
+
 A PWA where users describe their insurance needs in plain language (life, health, travel, pet) and an agentic AI suggests and compares matching policies. Policy data is ingested from insurer documents into a Postgres catalog and exposed to the agent via an MCP server.
 
-**Market:** Philippines. **Positioning:** suggest + compare only — no quoting, binding, or selling.
-
-**Status:** Phases 0–4 complete and deployable — policy catalog + MCP server, LangGraph agent, PWA, and the full ingestion pipeline (async queue worker). Phase 5 (hardening) is mostly done; the main remaining item is replacing the demo seed with real PH policies. See [`docs/05-roadmap.md`](docs/05-roadmap.md).
+**Market:** Philippines. **Positioning:** suggest + compare only — no quoting, binding, or selling. This is not insurance advice; see the [disclaimer](docs/disclaimer.md).
 
 ## How it works
 
@@ -13,46 +17,59 @@ A PWA where users describe their insurance needs in plain language (life, health
 3. **Verify** — every recommendation passes a programmatic guardrail against real catalog fields, then a cross-provider LLM judge panel fact-checks each written claim. Unsupported claims are dropped, never shown.
 4. **Answer honestly** — a no-match is a valid outcome, and it explains *which answer excluded which policy* rather than forcing a fit.
 
-## Structure
+## Quick start
 
-| Path | Purpose | Port |
-|---|---|---|
-| `docs/` | Plan documents (start with [`00-overview.md`](docs/00-overview.md)) | — |
-| `pwa/` | React PWA frontend (Vite + vite-plugin-pwa) | 5173 |
-| `api/` | FastAPI gateway: SSE streaming, rate limiting, public file proxy | 8000 |
-| `agent/` | LangGraph recommendation agent | 8001 |
-| `mcp-server/` | Read-only MCP server over the policy catalog (`/mcp`) | 8002 |
-| `ingestion/` | Policy document ingestion pipeline + reviewer portal | 8003 |
-| `db/` | Alembic migrations + catalog seed script | — |
-| `shared/` | Shared Pydantic models (policy schema, coverage types) | — |
-| `deploy/` | Manual multi-arch image publish script | — |
-| `VERSION` | Release floor/seed — git tags are the source of truth (see [Versioning](#versioning--releases)) | — |
-| `harness/` | Engineering conventions this repo is maintained by | — |
+Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/), [uv](https://docs.astral.sh/uv/getting-started/installation/), git. (Node 22 only if developing the PWA outside Docker.)
 
-Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (Python >= 3.14). The `ingestion/` package runs as **two** services: the web/reviewer API above and a durable queue **worker** (`python -m ingestion.worker`) that parses + LLM-extracts uploads off the request path.
+```bash
+git clone https://github.com/phdwight/insurance.git
+cd insurance
+cp .env.example .env        # fill in any API keys you have (all optional)
 
-### HTTP surface
+docker compose up --build   # Postgres, migrations, all services, PWA
 
-| Service | Endpoints |
-|---|---|
-| `api` :8000 | `POST /chat` (SSE, rate-limited) · `GET /product-lines` · `GET /compare?slugs=a,b` · `GET /policies/{slug}/brochure` · `GET /policies/{slug}/document` · `GET /health` |
-| `agent` :8001 | `POST /chat` (SSE) · `GET /ops/usage` (LLM spend ledger) · `GET /health` |
-| `mcp-server` :8002 | `/mcp` (streamable HTTP; tools: `list_product_lines`, `list_insurers`, `search_policies`, `get_policy`, `compare_policies`) · `GET /product-lines` · `GET /compare` · `GET /health` |
-| `ingestion` :8003 | `GET /admin` (reviewer UI) · `POST /documents` · `GET /reviews[/{id}]` · `POST /reviews/{id}/{approve,reject}` · `GET /stats` · `GET /insurers` · public `GET /policies/{slug}/{brochure,document}` · `GET /health` |
+# in a second terminal — seed demo policies into the catalog
+docker compose run --rm migrate python db/seed.py
+```
 
-Everything except `/health`, `/admin`, and the public brochure endpoints requires `ADMIN_TOKEN` on the ingestion service.
+Then open **http://localhost:5173**. Check everything is alive:
 
-## API keys
+```bash
+curl localhost:8000/health   # api        {"status":"ok","service":"api","version":"..."}
+curl localhost:8001/health   # agent
+curl localhost:8002/health   # mcp-server
+curl localhost:8003/health   # ingestion
+```
+
+> The seed data is **fictional demo data** for pipeline validation. Replace `db/seed_data.yaml` with real policies (hand-entered from public insurer brochures) before anything user-facing.
+
+## Usage
+
+**Add a policy** via the reviewer UI at **http://localhost:8003/admin**: upload a brochure PDF — the insurer is detected from the document, so nothing is pre-selected. The upload returns immediately while a background worker triages the PDF (vision transcription or docling) and LLM-extracts a draft; review it and approve to publish. Re-uploading the same file re-runs extraction as a fresh review, and approving a slug that already exists publishes a **new version** (history is kept).
+
+**Query the catalog over MCP** — the interesting part:
+
+```bash
+npx @modelcontextprotocol/inspector
+# connect to http://localhost:8002/mcp (streamable HTTP), then call:
+#   search_policies { "product_line": "travel", "max_premium": 2000 }
+```
+
+With `VOYAGE_API_KEY` set (and after re-seeding), `search_policies` ranks semantically by `needs_description`; without it, results sort by premium.
+
+## Configuration
+
+### API keys
 
 | Env var | Needed for | Required? | Where to get it |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | Agent chat + ingestion extraction (default provider) | Required for free-form chat + auto-extraction; guided mode and manual drafting work without it | [console.anthropic.com](https://console.anthropic.com/) |
 | `OPENAI_API_KEY` | Alternative provider, and half the default verifier panel (`openai:gpt-4o-mini`) | Optional | [platform.openai.com](https://platform.openai.com/) |
 | `VOYAGE_API_KEY` | Semantic policy search + seed-time embeddings (voyage-3.5) | Optional — without it, search falls back to SQL premium-sorted ranking | [voyageai.com](https://www.voyageai.com/) (free tier) |
-| `LANGSMITH_API_KEY` | Per-call LLM tracing (set `LANGSMITH_TRACING=true`) | Optional — `/ops/usage` gives token/cost accounting without it | [smith.langchain.com](https://smith.langchain.com/) (free tier) |
+| `LANGSMITH_API_KEY` | Per-call LLM tracing (set `LANGSMITH_TRACING=true`) | Optional — `/ops/usage` gives token accounting without it | [smith.langchain.com](https://smith.langchain.com/) (free tier) |
 | `ADMIN_TOKEN` | Locks the ingestion/reviewer surface (`:8003`) | Required before exposing beyond localhost | any secret string you choose |
 
-**Nothing is required to run the stack today** — guided mode and the pipeline work with zero keys (free-form chat and auto-extraction are what need a provider key). Postgres credentials default to `insurance`/`insurance` via compose; override in `.env` for anything non-local.
+**Nothing is required to run the stack** — guided mode and the pipeline work with zero keys (free-form chat and auto-extraction are what need a provider key). Postgres credentials default to `insurance`/`insurance` via compose; override in `.env` for anything non-local.
 
 ### Model roster
 
@@ -80,112 +97,36 @@ LLM spend scales with the **catalog**, not with users — see [`docs/06-scaling.
 
 Chip taps and bare-number answers skip the extractor LLM entirely (the deterministic parser already consumed them), so a returning user's whole conversation can cost zero tokens. `GET /ops/usage` reports tokens by day/model/role, with cache hits recorded as zero-token rows.
 
-## Quick start from scratch
+## Architecture
 
-Prerequisites: [Docker Desktop](https://www.docker.com/products/docker-desktop/), [uv](https://docs.astral.sh/uv/getting-started/installation/), git. (Node 22 only if developing the PWA outside Docker.)
+| Path | Purpose | Port |
+|---|---|---|
+| `pwa/` | React PWA frontend (Vite + vite-plugin-pwa) | 5173 |
+| `api/` | FastAPI gateway: SSE streaming, rate limiting, public file proxy | 8000 |
+| `agent/` | LangGraph recommendation agent | 8001 |
+| `mcp-server/` | Read-only MCP server over the policy catalog (`/mcp`) | 8002 |
+| `ingestion/` | Policy document ingestion pipeline + reviewer portal | 8003 |
+| `db/` | Alembic migrations + catalog seed script | — |
+| `shared/` | Shared Pydantic models (policy schema, coverage types) | — |
+| `docs/` | Design documents + drawio diagrams | — |
+| `deploy/` | Manual multi-arch image publish script | — |
+| `harness/` | Engineering conventions this repo is maintained by | — |
+| `VERSION` | Release floor/seed — git tags are the source of truth | — |
 
-```bash
-# 1. Clone and configure
-git clone https://github.com/phdwight/insurance.git
-cd insurance
-cp .env.example .env        # fill in any API keys you have (all optional for now)
+Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (Python >= 3.14). The `ingestion/` package runs as **two** services: the web/reviewer API above and a durable queue **worker** (`python -m ingestion.worker`) that parses + LLM-extracts uploads off the request path.
 
-# 2. Start everything: Postgres, migrations, all services, PWA
-docker compose up --build
+### HTTP surface
 
-# 3. (new terminal) Seed demo policies into the catalog
-docker compose run --rm migrate python db/seed.py
-```
+| Service | Endpoints |
+|---|---|
+| `api` :8000 | `POST /chat` (SSE, rate-limited) · `GET /product-lines` · `GET /compare?slugs=a,b` · `GET /policies/{slug}/brochure` · `GET /policies/{slug}/document` · `GET /health` |
+| `agent` :8001 | `POST /chat` (SSE) · `GET /ops/usage` (LLM spend ledger) · `GET /health` |
+| `mcp-server` :8002 | `/mcp` (streamable HTTP; tools: `list_product_lines`, `list_insurers`, `search_policies`, `get_policy`, `compare_policies`) · `GET /product-lines` · `GET /compare` · `GET /health` |
+| `ingestion` :8003 | `GET /admin` (reviewer UI) · `POST /documents` · `GET /reviews[/{id}]` · `POST /reviews/{id}/{approve,reject}` · `GET /stats` · `GET /insurers` · public `GET /policies/{slug}/{brochure,document}` · `GET /health` |
 
-Add real policies via the **reviewer UI at http://localhost:8003/admin**: upload a
-brochure PDF (insurer is detected from the document). The upload returns immediately
-and a background **worker** triages the PDF (vision transcription or docling) and
-LLM-extracts a draft while the page polls; then review the draft and approve to
-publish. Re-uploading the same file re-runs extraction as a fresh review, and
-approving a slug that already exists publishes a **new version** (history is kept).
+Everything except `/health`, `/admin`, and the public brochure endpoints requires `ADMIN_TOKEN` on the ingestion service.
 
-Verify it's alive:
-
-```bash
-curl localhost:8000/health   # api
-curl localhost:8001/health   # agent
-curl localhost:8002/health   # mcp-server
-curl localhost:8003/health   # ingestion
-open http://localhost:5173   # pwa
-```
-
-Exercise the MCP server (the interesting part):
-
-```bash
-npx @modelcontextprotocol/inspector
-# connect to http://localhost:8002/mcp (streamable HTTP), then call:
-#   search_policies { "product_line": "travel", "max_premium": 2000 }
-```
-
-With `VOYAGE_API_KEY` set in `.env` (and re-seeding), `search_policies` ranks semantically by `needs_description`; without it, results sort by premium.
-
-> The seed data is **fictional demo data** for pipeline validation. Replace `db/seed_data.yaml` with real policies (hand-entered from public insurer brochures) before anything user-facing.
-
-## Production deployment
-
-`docker-compose.prod.yml` is the single production compose. It pulls pre-built images from GHCR (or `--build`s locally), publishes host ports **from 41500** (pwa 41500, api 41501, ingestion 41502; postgres, agent, and mcp-server stay internal), and adds restart policies, log rotation, memory limits, `/health` healthchecks, and required-secret guards.
-
-**Images are published automatically:** merging image-affecting code to `main`
-triggers the [`Publish images`](.github/workflows/publish-images.yml) workflow,
-which builds only the services whose inputs changed, multi-arch (amd64 + arm64,
-native runners), and pushes them to GHCR tagged `:latest` and `:sha-<short>`.
-`deploy/push-images.sh` is the manual fallback for building/publishing locally.
-
-```bash
-# (Manual/local alternative to CI — multi-arch amd64+arm64:)
-IMAGE_PREFIX=ghcr.io/phdwight IMAGE_TAG=latest ./deploy/push-images.sh
-
-# On the TARGET host — only this file + .env are needed:
-cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL
-docker compose -f docker-compose.prod.yml --env-file .env pull   # get the latest images
-docker compose -f docker-compose.prod.yml --env-file .env up -d
-```
-
-`CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser (e.g. `http://<host>:41501`, or an HTTPS domain). Leave **`VITE_INGESTION_URL` empty** — brochure covers and documents are proxied by the API gateway, so the ingestion host can sit entirely behind an access layer (e.g. Cloudflare Access). Only set it to serve those files from a different *public* host; pointing it at an access-gated host silently breaks covers, because a browser `<img>` can't authenticate. Front the published ports with a TLS-terminating reverse proxy for anything internet-facing. Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe).
-
-Migrations run automatically: the `migrate` service applies Alembic to head before the app services start, so a `pull` + `up -d` is the whole upgrade.
-
-### Versioning & releases
-
-**Every merge to `main` cuts a release.** There is nothing to bump by hand:
-
-1. CI runs the full suite (the same one that gates a PR — `ci.yml` is reused, not duplicated).
-2. On green, it computes the next version and pushes an annotated **`vX.Y.Z` git tag**. Only the tag is pushed — never a commit, because `main` is protected and a CI commit would be rejected. Tags aren't branch-protected, so this needs no protection changes.
-3. Images whose inputs changed are rebuilt **with that version baked in**, then *every* image — including unchanged ones, re-tagged from its existing digest — gets the `:X.Y.Z` tag. So `IMAGE_TAG=X.Y.Z` always pulls a complete, coherent stack and is a real rollback point.
-4. The workflow then verifies each tag resolves and that rebuilt images carry the version *inside* them.
-
-The version source of truth is **git tags**; the committed [`VERSION`](VERSION) file is the seed for the first release and the **floor**:
-
-```bash
-# patch release: nothing to do — merging is enough (0.1.4 -> 0.1.5)
-# minor/major:   raise the floor in the same PR, and that becomes the release
-echo 0.2.0 > VERSION     # next merge releases v0.2.0, then v0.2.1, v0.2.2 ...
-```
-
-Cutting a GitHub release reuses the tag CI already made — never let it create one:
-
-```bash
-gh release create v0.2.0 --verify-tag --notes "…"
-```
-
-**Everything reports the same number.** Each service returns it from `/health`, and the PWA shows it in the footer and serves it at `/VERSION`:
-
-```bash
-curl -s localhost:8000/health   # {"status":"ok","service":"api","version":"0.1.1"}
-```
-
-At runtime the version resolves as `APP_VERSION` env → the baked `VERSION` file → `0.0.0+dev` (an unstamped local build is always identifiable and never masquerades as a release). `docker-compose.prod.yml` passes `APP_VERSION=$IMAGE_TAG`, so a version-pinned deploy reports that release across every service — including services that weren't rebuilt for it.
-
-### Image hygiene
-
-Published images carry no secrets and no dev baggage: `.dockerignore` keeps `.env`, the local `.venv`, `pwa/`, `samples/`, `docs/`, and tests out of the build context, and `uv sync --no-cache` keeps uv's download cache out of the final layer. `deploy/push-images.sh` refuses to publish if `.env` is ever reachable in the build context, and `tests/test_image_hygiene.py` fails CI if those guards are weakened.
-
-## Local development (without Docker)
+## Development
 
 ```bash
 uv sync --all-packages        # installs Python 3.14 + all services (editable)
@@ -203,11 +144,57 @@ cd pwa && npm install && npm run dev
 Database migrations:
 
 ```bash
-uv run alembic -c db/alembic.ini upgrade head      # apply
+uv run alembic -c db/alembic.ini upgrade head       # apply
 uv run alembic -c db/alembic.ini revision -m "..."  # create new
 ```
 
-`uv run pytest`, `uv run ruff check .`, and (for PWA changes) `npm run build` must all pass before a commit — see [`CLAUDE.md`](CLAUDE.md) for the conventions this repo is maintained by.
+`uv run pytest`, `uv run ruff check .`, and (for PWA changes) `npm run build` must all pass before a commit. [`CLAUDE.md`](CLAUDE.md) records the conventions and the architecture decisions in force; [`harness/`](harness/) holds the reusable engineering practices.
+
+## Deployment
+
+`docker-compose.prod.yml` is the single production compose. It pulls pre-built images from GHCR (or `--build`s locally), publishes host ports **from 41500** (pwa 41500, api 41501, ingestion 41502; postgres, agent, and mcp-server stay internal), and adds restart policies, log rotation, memory limits, `/health` healthchecks, and required-secret guards.
+
+```bash
+# On the TARGET host — only this file + .env are needed:
+cp .env.example .env    # set POSTGRES_PASSWORD, ADMIN_TOKEN, CORS_ORIGINS, VITE_API_URL
+docker compose -f docker-compose.prod.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+`CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser. Leave **`VITE_INGESTION_URL` empty** — brochure covers and documents are proxied by the API gateway, so the ingestion host can sit entirely behind an access layer (e.g. Cloudflare Access). Only set it to serve those files from a different *public* host; pointing it at an access-gated host silently breaks covers, because a browser `<img>` can't authenticate. Front the published ports with a TLS-terminating reverse proxy for anything internet-facing.
+
+Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe). Migrations run automatically: the `migrate` service applies Alembic to head before the app services start, so `pull` + `up -d` is the whole upgrade.
+
+### Versioning & releases
+
+**Every merge to `main` cuts a release.** There is nothing to bump by hand:
+
+1. CI runs the full suite (the same one that gates a PR — `ci.yml` is reused, not duplicated).
+2. On green, it computes the next version and pushes an annotated **`vX.Y.Z` git tag**. Only the tag is pushed — never a commit, because `main` is protected and a CI commit would be rejected.
+3. Images whose inputs changed are rebuilt **with that version baked in**, then *every* image — including unchanged ones, re-tagged from its existing digest — gets the `:X.Y.Z` tag. So `IMAGE_TAG=X.Y.Z` always pulls a complete, coherent stack and is a real rollback point.
+4. The workflow verifies each tag resolves and that rebuilt images carry the version *inside* them.
+
+The version source of truth is **git tags**; the committed [`VERSION`](VERSION) file is the seed for the first release and the **floor**:
+
+```bash
+# patch release: nothing to do — merging is enough (0.1.4 -> 0.1.5)
+# minor/major:   raise the floor in the same PR, and that becomes the release
+echo 0.2.0 > VERSION     # next merge releases v0.2.0, then v0.2.1, v0.2.2 ...
+```
+
+Cutting a GitHub release reuses the tag CI already made — never let it create one:
+
+```bash
+gh release create v0.2.0 --verify-tag --notes "…"
+```
+
+**Everything reports the same number.** Each service returns it from `/health`, and the PWA shows it in the footer and serves it at `/VERSION`. At runtime the version resolves as `APP_VERSION` env → the baked `VERSION` file → `0.0.0+dev` (an unstamped local build is always identifiable). `docker-compose.prod.yml` passes `APP_VERSION=$IMAGE_TAG`, so a version-pinned deploy reports that release across every service.
+
+Images are published automatically by the [`Publish images`](.github/workflows/publish-images.yml) workflow (multi-arch amd64 + arm64 on native runners); `deploy/push-images.sh` is the manual fallback.
+
+### Image hygiene
+
+Published images carry no secrets and no dev baggage: `.dockerignore` keeps `.env`, the local `.venv`, `pwa/`, `samples/`, `docs/`, and tests out of the build context, and `uv sync --no-cache` keeps uv's download cache out of the final layer. `deploy/push-images.sh` refuses to publish if `.env` is ever reachable in the build context, and `tests/test_image_hygiene.py` fails CI if those guards are weakened.
 
 ## Troubleshooting
 
@@ -223,12 +210,29 @@ uv run alembic -c db/alembic.ini revision -m "..."  # create new
 - **A policy you just published doesn't appear** — read-only catalog calls are cached for `CATALOG_CACHE_SECONDS` (60s default), so new policies reach fresh conversations within a minute.
 - **"No policy matches" for a policy you know exists** — the message names which answer excluded which policy (matching is fully deterministic, never an LLM guess). Check the stated eligibility band or attribute against the answer given.
 
-## Docs
+## Documentation
 
-Plan documents live in [`docs/`](docs/): overview, architecture, ingestion/MCP design, agent design, PWA/UX, roadmap, and scaling posture — plus drawio diagrams of the high-level architecture (`architecture.drawio`), the agent graph, and the ingestion pipeline, kept in sync with the implementation.
+Design documents live in [`docs/`](docs/):
+
+| Doc | Contents |
+|---|---|
+| [`00-overview.md`](docs/00-overview.md) | Vision, differentiation, scope, PH compliance |
+| [`01-architecture.md`](docs/01-architecture.md) | Components, data flows, stack decisions |
+| [`02-ingestion-mcp.md`](docs/02-ingestion-mcp.md) | Pipeline, catalog schema, MCP tools |
+| [`03-agent-design.md`](docs/03-agent-design.md) | LangGraph state, graph, guardrails, evals |
+| [`04-pwa-ux.md`](docs/04-pwa-ux.md) | Screens, PWA capabilities, streaming protocol |
+| [`05-roadmap.md`](docs/05-roadmap.md) | Delivery plan, risks, open questions |
+| [`06-scaling.md`](docs/06-scaling.md) | Scaling posture: what's ready, and the trigger for each next step |
+| [`disclaimer.md`](docs/disclaimer.md) | Canonical legal notice, mirrored into both UIs |
+
+Drawio diagrams of the high-level architecture (`architecture.drawio`), the agent graph, and the ingestion pipeline live alongside them and are kept in sync with the implementation.
+
+## Contributing
+
+Read [`CLAUDE.md`](CLAUDE.md) first — it records the architecture decisions in force and the conventions (documentation, diagrams, implementation, and tests move together in the same commit). Work happens on `develop` and reaches `main` via pull request; `uv run pytest`, `uv run ruff check .`, and `npm run build` (for PWA changes) must pass.
 
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
 
-> **Not insurance advice.** This project suggests and compares publicly published policy information; it does not quote, bind, or sell insurance, and it is not a licensed insurance intermediary. Every result carries its source and an "as of" date — confirm final terms with the insurer.
+> **Not insurance advice.** This project suggests and compares publicly published policy information; it does not quote, bind, or sell insurance, and it is not a licensed insurance intermediary. Every result carries its source and an "as of" date — confirm final terms with the insurer. See the full [disclaimer](docs/disclaimer.md).

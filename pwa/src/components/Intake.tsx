@@ -92,10 +92,13 @@ export default function Intake(props: {
           <ArrowIcon />
         </button>
 
+        {/* Claims here must be literally true and must not imply we act as an
+            insurance intermediary. "Matched with licensed insurers" implied
+            brokering; "encrypted" overstated the storage guarantee. */}
         <p className="footer-note">
           <LockIcon />
-          Your details are encrypted and used only to match you with licensed insurers — never
-          sold. Every plan is explained in plain English.
+          Your answers are used only to filter the policy catalog during your session, and are
+          deleted on a routine schedule — never sold. Information only, not insurance advice.
         </p>
       </div>
     </section>
