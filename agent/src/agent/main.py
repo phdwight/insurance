@@ -1,6 +1,9 @@
 """Agent service: POST /chat streams SSE events per graph node.
 
 Events: profile_update, question, recommendations, message, done.
+`recommendations` is emitted from verify_explanations (or from explain on a
+cache hit, whose payload is already verified) — never from the writer's raw
+output, or the client would see claims the judge panel is about to drop.
 Conversation state persists per session_id via the LangGraph checkpointer
 (Postgres when DATABASE_URL is set, in-memory otherwise).
 """
@@ -105,7 +108,22 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                             "options": None,
                         }
                         yield _sse("question", question)
-                    if node == "explain" and payload.get("recommendations"):
+                    # Recommendations must reach the client AFTER the judge
+                    # panel, never before: `explain` emits the writer's raw
+                    # claims, and `verify_explanations` is what drops the ones
+                    # the panel can't ground. Streaming explain's payload meant
+                    # the first user of an outcome bucket saw unverified claims
+                    # while everyone after them (served from the cache, which
+                    # stores the post-panel result) saw the filtered set.
+                    #
+                    # A cache hit is the one case explain may emit: that payload
+                    # came out of the cache already verified, and
+                    # verify_explanations returns {} for it. Every other path
+                    # returns recommendations from verify_explanations — panel
+                    # on or off — so nothing is ever dropped from the stream.
+                    if node == "explain" and payload.get("explanations_cached"):
+                        yield _sse("recommendations", payload["recommendations"])
+                    if node == "verify_explanations" and payload.get("recommendations"):
                         yield _sse("recommendations", payload["recommendations"])
                     if node in ("present", "explain"):
                         for message in payload.get("messages", []):

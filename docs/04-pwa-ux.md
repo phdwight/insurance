@@ -53,7 +53,8 @@ Server-sent events with typed events so the UI can render structure mid-conversa
 ```
 event: token            { text }                      # assistant prose
 event: profile_update   { profile }                   # chips panel refresh
-event: recommendations  { line, policies[] }          # render cards
+event: recommendations  { line, policies[] }          # render cards (emitted AFTER
+                                                      # the judge panel, never before)
 event: state            { node, status }              # progress indicator
 ```
 

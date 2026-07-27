@@ -132,3 +132,87 @@ def test_stream_reports_errors_instead_of_crashing(monkeypatch) -> None:
         by_kind = dict(events)
         assert "catalog exploded" in by_kind["error"]["detail"]
         assert [event for event, _ in events][-1] == "done"  # stream still terminates
+
+
+def _finalise(client: TestClient, session: str) -> list[tuple[str, dict]]:
+    """Two turns is enough to reach recommendations with this catalog (the
+    trip-length answer narrows 4 -> 2), mirroring the multi-turn test above."""
+    post_turn(client, session, "I need travel insurance")
+    return post_turn(client, session, "45 days")
+
+
+def _install_llm_fakes(monkeypatch, writer) -> None:
+    """Pretend a provider key exists, but never call one: stub the extractor
+    (guided turns still route through it) and the writer."""
+    monkeypatch.setattr(nodes, "llm_available", lambda: True)
+
+    async def fake_extract(profile, text):
+        return profile
+
+    monkeypatch.setattr(nodes, "_extract_with_llm", fake_extract)
+    monkeypatch.setattr(nodes, "_explain_with_llm", writer)
+
+
+UNGROUNDED = "Includes free airport lounge access."
+
+
+async def _writer_with_one_bad_claim(profile, recommendations):
+    return {
+        policy["slug"]: [
+            {"text": "Covers your destination.", "kind": "match"},
+            {"text": UNGROUNDED, "kind": "match"},  # the panel will drop this
+        ]
+        for policies in recommendations.values()
+        for policy in policies
+    }
+
+
+def test_recommendations_reach_the_client_only_after_the_judge_panel(monkeypatch) -> None:
+    """The panel exists to drop claims it cannot ground. Streaming `explain`'s
+    payload shipped the writer's raw claims to the FIRST user of an outcome
+    bucket, while everyone after them — served from the cache, which stores the
+    post-panel result — got the filtered set. The client must only ever see the
+    verified output."""
+    install_fakes(monkeypatch)
+    _install_llm_fakes(monkeypatch, _writer_with_one_bad_claim)
+    monkeypatch.setenv("VERIFIER_MODELS", "prov1:a,prov2:b")
+
+    async def fake_panel(recommendations):
+        for policies in recommendations.values():
+            for policy in policies:
+                policy["match_reasons"] = [
+                    r for r in policy["match_reasons"] if r["text"] != UNGROUNDED
+                ]
+                policy["verification"] = {"judges": ["a", "b"], "reasons_dropped": 1}
+        return recommendations
+
+    from agent import verifier
+
+    monkeypatch.setattr(verifier, "verify_recommendations", fake_panel)
+
+    with TestClient(agent_main.app) as client:
+        events = _finalise(client, "panel-order")
+
+    payloads = [data for kind, data in events if kind == "recommendations"]
+    assert payloads, "no recommendations were streamed"
+    for payload in payloads:
+        for policies in payload.values():
+            for policy in policies:
+                texts = [r["text"] for r in policy["match_reasons"]]
+                assert UNGROUNDED not in texts, "client saw a claim the panel dropped"
+                assert "verification" in policy, "client got the pre-panel payload"
+
+
+def test_recommendations_still_stream_when_the_panel_is_disabled(monkeypatch) -> None:
+    """No judges configured is the ordinary local/keyless case — results must
+    still reach the client, just unfiltered."""
+    install_fakes(monkeypatch)
+    _install_llm_fakes(monkeypatch, _writer_with_one_bad_claim)
+    monkeypatch.delenv("VERIFIER_MODELS", raising=False)  # panel off
+
+    with TestClient(agent_main.app) as client:
+        events = _finalise(client, "panel-off")
+
+    payloads = [data for kind, data in events if kind == "recommendations"]
+    assert payloads, "results must still stream with no panel configured"
+    assert payloads[0]["travel"], "expected the narrowed travel policies"
