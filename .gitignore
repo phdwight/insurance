@@ -36,3 +36,6 @@ ugreen_compose.yml
 
 # drawio desktop autosave/backup files
 .$*.bkp
+
+# Generated into the build context at image build time (see publish-images.yml)
+BUILD_ID

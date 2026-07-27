@@ -317,6 +317,17 @@ def test_admin_ui_and_supporting_endpoints(monkeypatch, tmp_path) -> None:
     for marker in ("Review queue", "Approve", "dropzone", "/reviews"):
         assert marker in page.text
 
+    # Release stamp is substituted server-side, so a reviewer can always tell
+    # which build they are looking at. Leftover tokens mean the swap regressed.
+    from shared import app_version, build_id
+
+    assert f"v{app_version()}" in page.text
+    assert f"build {build_id()}" in page.text
+    assert "__APP_VERSION__" not in page.text and "__BUILD_ID__" not in page.text
+
+    # ...and the legal notice stays reachable from the same footer.
+    assert "Important disclaimer" in page.text
+
     # insurer dropdown data
     assert client.get("/insurers").json()[0]["slug"] == "byahero-demo"
 
