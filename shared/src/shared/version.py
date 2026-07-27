@@ -7,12 +7,19 @@ one resolver means the number in ``/health``, in the PWA footer, in the image
 tag, and on the git tag cannot drift apart.
 
 Resolution order:
-  1. ``APP_VERSION`` env — an explicit override (CI bakes the released version
-     here so a container reports it even if the file is stale),
+  1. ``APP_VERSION`` env — an explicit override (prod compose passes
+     ``$IMAGE_TAG``, so a pinned deploy reports the release it was deployed as),
   2. the nearest ``VERSION`` file walking up from this module — the repo root in
      a checkout, ``/app/VERSION`` inside an image,
-  3. ``0.0.0+dev`` — an obviously-unreleased marker, never a plausible-looking
-     version that could be mistaken for a real release.
+  3. ``0.0.0+dev`` — an obviously-unreleased marker.
+
+A ``+dev`` suffix is added whenever this is NOT a published artifact, which is
+detected by the absence of a ``BUILD_ID`` (CI writes one into the build context
+for every image it publishes; a source checkout has none). Without that, a local
+build inherits the committed ``VERSION`` — the release FLOOR, not the current
+version — and reports something like "0.1.1", claiming to be a real past release
+while its build stamp says "dev". The floor is deliberately left behind as tags
+advance, so that mismatch is permanent and only grows.
 """
 
 import os
@@ -38,7 +45,13 @@ def _stamp(env_var: str, filename: str, fallback: str) -> str:
 
 @lru_cache(maxsize=1)
 def app_version() -> str:
-    return _stamp("APP_VERSION", "VERSION", FALLBACK)
+    version = _stamp("APP_VERSION", "VERSION", FALLBACK)
+    # An explicit APP_VERSION is a deliberate statement ("deployed as X"), and
+    # the bare fallback is already marked — everything else is only a release if
+    # CI built it, which is exactly what a BUILD_ID proves.
+    if os.environ.get("APP_VERSION", "").strip() or version == FALLBACK:
+        return version
+    return version if build_id() != BUILD_FALLBACK else f"{version}+dev"
 
 
 @lru_cache(maxsize=1)
