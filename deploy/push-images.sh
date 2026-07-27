@@ -26,6 +26,25 @@ PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 # repo root = parent of this script's directory
 cd "$(dirname "$0")/.."
 
+# Preflight: these images are PUBLIC. A local build sends the working tree as
+# the build context, so a .dockerignore that stops excluding secrets would bake
+# a real .env into every published image (this happened once, before
+# .dockerignore existed — the images were public with live keys). Refuse to
+# publish unless the context genuinely excludes it.
+if [ -f .env ]; then
+  probe=$(mktemp -d)
+  printf 'FROM busybox\nCOPY . /ctx\nRUN test ! -e /ctx/.env\n' > "$probe/Dockerfile"
+  if ! docker build -q -f "$probe/Dockerfile" -t insurance-secret-probe . >/dev/null 2>&1; then
+    rm -rf "$probe"
+    echo "ABORT: .env is reachable in the Docker build context — it would be baked" >&2
+    echo "       into published images. Fix .dockerignore before publishing." >&2
+    exit 1
+  fi
+  docker rmi -f insurance-secret-probe >/dev/null 2>&1 || true
+  rm -rf "$probe"
+  echo "==> preflight OK: .env is excluded from the build context"
+fi
+
 builder="insurance-builder"
 docker buildx inspect "$builder" >/dev/null 2>&1 || docker buildx create --name "$builder" --use
 docker buildx use "$builder"

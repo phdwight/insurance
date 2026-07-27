@@ -10,9 +10,9 @@
 # Local virtualenv — uv rebuilds it in-image via `uv sync`
 .venv
 
-# Node / PWA — not needed by the Python images; the PWA has its own build context
-**/node_modules
-pwa/dist
+# Node / PWA — the PWA builds from its own context (pwa/Dockerfile.prod), so the
+# Python images need none of it.
+pwa
 
 # VCS & CI
 .git
@@ -29,3 +29,15 @@ pwa/dist
 
 # OS / editor cruft
 .DS_Store
+
+# Dev-only content — never read at runtime, so it has no business in a published
+# image (samples alone is ~2 MB of local brochure PDFs).
+samples
+docs
+harness
+deploy
+.claude
+*.md
+!README.md
+**/tests
+conftest.py

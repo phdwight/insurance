@@ -15,7 +15,10 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_HTTP_TIMEOUT=300
 
 WORKDIR /app
 COPY . .
-RUN uv sync --frozen --no-dev --package insurance-${SERVICE}
+# --no-cache: with UV_LINK_MODE=copy every package is copied into .venv, so uv's
+# download cache is dead weight in the final layer (it was ~1.4 GB on ingestion,
+# ~37 MB on the light services). Nothing at runtime reads it.
+RUN uv sync --frozen --no-dev --no-cache --package insurance-${SERVICE}
 
 ENV PATH="/app/.venv/bin:$PATH"
 
