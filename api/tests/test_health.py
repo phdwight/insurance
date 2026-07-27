@@ -1,13 +1,19 @@
 from api.main import app
 from fastapi.testclient import TestClient
 
+from shared import app_version
+
 client = TestClient(app)
 
 
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "api"}
+    body = response.json()
+    assert body["status"] == "ok" and body["service"] == "api"
+    # The running service must report the released version — it is what the
+    # release flow verifies against the git tag (see README "Versioning").
+    assert body["version"] == app_version()
 
 
 def test_chat_validates_input() -> None:

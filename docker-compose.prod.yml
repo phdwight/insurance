@@ -34,6 +34,10 @@ x-logging: &logging
 
 x-app-env: &app-env
   DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-insurance}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-insurance}}
+  # Report the release you actually deployed. Pinning IMAGE_TAG=X.Y.Z makes every
+  # service's /health say X.Y.Z; on :latest this is empty and each service falls
+  # back to the version baked in at build time (see shared/version.py).
+  APP_VERSION: ${IMAGE_TAG:-}
 
 x-embedding-env: &embedding-env
   VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}

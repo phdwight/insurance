@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ingestion import correction, parsing, preview, repository
 from ingestion.prompts import PolicyDraft
+from shared import app_version
 
 
 def require_admin_token(request: Request) -> None:
@@ -258,4 +259,4 @@ def admin() -> HTMLResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "ingestion"}
+    return {"status": "ok", "service": "ingestion", "version": app_version()}

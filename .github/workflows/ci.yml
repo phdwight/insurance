@@ -1,9 +1,14 @@
 name: CI
 
+# Runs on every PR, and is CALLED by the release workflow (publish-images.yml)
+# as the gate before it tags a version and publishes images — so the suite that
+# guards a PR is literally the same suite that guards a release, defined once.
+#
+# No `push: [main]` trigger: publish-images.yml runs on every push to main and
+# invokes this via workflow_call, so a merge would otherwise run it twice.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   python:

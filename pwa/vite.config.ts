@@ -11,9 +11,18 @@ const buildId =
   `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
   `${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
 
+// Released version. CI bakes the tagged version in via APP_VERSION (the PWA
+// builds from the pwa/ context, so the repo-root VERSION file isn't readable
+// here); a local build falls back to the same unreleased marker the Python
+// services use, so a dev bundle can never masquerade as a release.
+// Declared locally rather than pulling in @types/node for one lookup.
+declare const process: { env: Record<string, string | undefined> };
+const appVersion = process.env.APP_VERSION?.trim() || "0.0.0+dev";
+
 export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   plugins: [
     react(),

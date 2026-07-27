@@ -26,6 +26,7 @@ A PWA where users describe their insurance needs in plain language (life, health
 | `db/` | Alembic migrations + catalog seed script | — |
 | `shared/` | Shared Pydantic models (policy schema, coverage types) | — |
 | `deploy/` | Manual multi-arch image publish script | — |
+| `VERSION` | Release floor/seed — git tags are the source of truth (see [Versioning](#versioning--releases)) | — |
 | `harness/` | Engineering conventions this repo is maintained by | — |
 
 Postgres (with pgvector) runs on 5432. Python services form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (Python >= 3.14). The `ingestion/` package runs as **two** services: the web/reviewer API above and a durable queue **worker** (`python -m ingestion.worker`) that parses + LLM-extracts uploads off the request path.
@@ -148,6 +149,37 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d
 `CORS_ORIGINS` and `VITE_API_URL` must be the API's **public** address as seen from the browser (e.g. `http://<host>:41501`, or an HTTPS domain). Leave **`VITE_INGESTION_URL` empty** — brochure covers and documents are proxied by the API gateway, so the ingestion host can sit entirely behind an access layer (e.g. Cloudflare Access). Only set it to serve those files from a different *public* host; pointing it at an access-gated host silently breaks covers, because a browser `<img>` can't authenticate. Front the published ports with a TLS-terminating reverse proxy for anything internet-facing. Ingestion parsing runs in its own `ingestion-worker` service — scale it with `docker compose ... up -d --scale ingestion-worker=N` (the queue is concurrency-safe).
 
 Migrations run automatically: the `migrate` service applies Alembic to head before the app services start, so a `pull` + `up -d` is the whole upgrade.
+
+### Versioning & releases
+
+**Every merge to `main` cuts a release.** There is nothing to bump by hand:
+
+1. CI runs the full suite (the same one that gates a PR — `ci.yml` is reused, not duplicated).
+2. On green, it computes the next version and pushes an annotated **`vX.Y.Z` git tag**. Only the tag is pushed — never a commit, because `main` is protected and a CI commit would be rejected. Tags aren't branch-protected, so this needs no protection changes.
+3. Images whose inputs changed are rebuilt **with that version baked in**, then *every* image — including unchanged ones, re-tagged from its existing digest — gets the `:X.Y.Z` tag. So `IMAGE_TAG=X.Y.Z` always pulls a complete, coherent stack and is a real rollback point.
+4. The workflow then verifies each tag resolves and that rebuilt images carry the version *inside* them.
+
+The version source of truth is **git tags**; the committed [`VERSION`](VERSION) file is the seed for the first release and the **floor**:
+
+```bash
+# patch release: nothing to do — merging is enough (0.1.4 -> 0.1.5)
+# minor/major:   raise the floor in the same PR, and that becomes the release
+echo 0.2.0 > VERSION     # next merge releases v0.2.0, then v0.2.1, v0.2.2 ...
+```
+
+Cutting a GitHub release reuses the tag CI already made — never let it create one:
+
+```bash
+gh release create v0.2.0 --verify-tag --notes "…"
+```
+
+**Everything reports the same number.** Each service returns it from `/health`, and the PWA shows it in the footer and serves it at `/VERSION`:
+
+```bash
+curl -s localhost:8000/health   # {"status":"ok","service":"api","version":"0.1.1"}
+```
+
+At runtime the version resolves as `APP_VERSION` env → the baked `VERSION` file → `0.0.0+dev` (an unstamped local build is always identifiable and never masquerades as a release). `docker-compose.prod.yml` passes `APP_VERSION=$IMAGE_TAG`, so a version-pinned deploy reports that release across every service — including services that weren't rebuilt for it.
 
 ### Image hygiene
 
